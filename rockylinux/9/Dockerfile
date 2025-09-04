@@ -138,7 +138,7 @@ WORKDIR ${BUILD_DIR}
 
 RUN set -x \
 # Install development packages
-    && dnf install -y make cmake gcc gcc-c++ autoconf automake perl patch \
+    && dnf -q -d 0 install -y make cmake gcc gcc-c++ autoconf automake perl patch \
         diffutils libtool procps-ng gd-devel libxslt-devel libxml2-devel
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
