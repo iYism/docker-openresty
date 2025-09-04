@@ -5,8 +5,8 @@
 # Define version arguments for OpenResty and its dependencies
 ARG OPENRESTY_VER=1.27.1.2
 ARG ZLIB_VER=1.3.1
-ARG PCRE2_VER=10.45
-ARG OPENSSL_VER=3.4.1
+ARG PCRE2_VER=10.46
+ARG OPENSSL_VER=3.5.2
 ARG GEOIP_VER=1.6.12
 ARG LIBMAXMINDDB_VER=1.12.2
 ARG BROTLI_VER=1.1.0
@@ -64,6 +64,13 @@ RUN set -x \
     && curl -Lo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
     && curl -Lo openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
+# Download openssl sess_set_get_cb_yield.patch
+    && STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -LI https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch); \
+       if [ "${STATUS_CODE:-0}" -eq 200 ]; then \
+           curl -Lo openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch ; \
+       else \
+           curl -Lo openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-"${OPENSSL_VER%.*}.0"-sess_set_get_cb_yield.patch ; \
+       fi \
 # Download GeoIP
     && curl -Lo GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
 # Download libmaxminddb
@@ -131,14 +138,14 @@ WORKDIR ${BUILD_DIR}
 
 RUN set -x \
 # Install development packages
-    && dnf install -y make cmake gcc gcc-c++ autoconf automake perl \
+    && dnf install -y make cmake gcc gcc-c++ autoconf automake perl patch \
         diffutils libtool procps-ng gd-devel libxslt-devel libxml2-devel
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
 
+# Install zlib
 RUN set -x \
     && cd ${BUILD_DIR}/src \
-# Install zlib
     && tar -zxf ${BUILD_DIR}/pkg/zlib-${ZLIB_VER}.tar.gz \
     && cd zlib-${ZLIB_VER} \
     && ./configure --prefix=${HOME_DIR}/zlib \
@@ -146,9 +153,11 @@ RUN set -x \
       SFLAGS='-O3 -fPIC -D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN' > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install > build.log 2>&1 || { cat build.log ; exit 1; } \
     && rm -rf ${HOME_DIR}/zlib/lib/*.la \
-    && rm -rf ${HOME_DIR}/zlib/share \
-    && cd .. \
+    && rm -rf ${HOME_DIR}/zlib/share
+
 # Install pcre2
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/pcre2-${PCRE2_VER}.tar.gz \
     && cd pcre2-${PCRE2_VER} \
     && CFLAGS="-fPIC -O3" ./configure \
@@ -181,11 +190,14 @@ RUN set -x \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install > build.log 2>&1 || { cat build.log ; exit 1; } \
     && rm -rf ${HOME_DIR}/pcre2/lib/*.la \
-    && rm -rf ${HOME_DIR}/pcre2/share \
-    && cd .. \
+    && rm -rf ${HOME_DIR}/pcre2/share
+
 # Install openssl
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/openssl-${OPENSSL_VER}.tar.gz \
     && cd openssl-${OPENSSL_VER} \
+    && patch -p1 < ${BUILD_DIR}/pkg/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch || exit 1 \
     && ./config \
       shared zlib \
       --prefix=${HOME_DIR}/openssl3 \
@@ -199,9 +211,11 @@ RUN set -x \
       -L${HOME_DIR}/zlib/lib \
       -Wl,-rpath,${HOME_DIR}/zlib/lib:${HOME_DIR}/openssl3/lib \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && cd .. \
+    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; }
+
 # Install GeoIP
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/GeoIP-${GEOIP_VER}.tar.gz \
     && cd GeoIP-${GEOIP_VER} \
     && ./bootstrap \
@@ -209,18 +223,22 @@ RUN set -x \
     && make -j`nproc` CFLAGS="-O3 -fPIC" > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install > build.log 2>&1 || { cat build.log ; exit 1; } \
     && rm -rf ${HOME_DIR}/GeoIP/lib/*.la \
-    && rm -rf ${HOME_DIR}/GeoIP/share \
-    && cd .. \
+    && rm -rf ${HOME_DIR}/GeoIP/share
+
 # Install libmaxminddb
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
     && cd libmaxminddb-${LIBMAXMINDDB_VER} \
     && ./configure --prefix=${HOME_DIR}/libmaxminddb \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install > build.log 2>&1 || { cat build.log ; exit 1; } \
     && rm -rf ${HOME_DIR}/libmaxminddb/lib/*.la \
-    && rm -rf ${HOME_DIR}/libmaxminddb/share \
-    && cd .. \
-# Install brotli
+    && rm -rf ${HOME_DIR}/libmaxminddb/share
+
+# Install brotli && Unpack ngx_brotli, inject specific Brotli source into its deps
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/brotli-${BROTLI_VER}.tar.gz \
     && cd brotli-${BROTLI_VER} \
     && mkdir out && cd out \
@@ -230,16 +248,20 @@ RUN set -x \
         -DCMAKE_INSTALL_LIBDIR=lib .. > build.log 2>&1 || { cat build.log ; exit 1; } \
     && cmake --build . --config Release --target install > build.log 2>&1 || { cat build.log ; exit 1; } \
     && cd ../.. \
-# Unpack ngx_brotli, inject specific Brotli source into its deps
     && tar -zxf ${BUILD_DIR}/pkg/ngx_brotli-${NGX_BROTLI_VER}.tar.gz \
     && cd ngx_brotli-${NGX_BROTLI_VER} \
     && mv ../brotli-${BROTLI_VER} deps/ \
     && rm -fr deps/brotli \
-    && mv deps/brotli-${BROTLI_VER} deps/brotli \
-    && cd .. \
+    && mv deps/brotli-${BROTLI_VER} deps/brotli
+
 # Unpack ngx_http_geoip2_module
-    && tar -zxf ${BUILD_DIR}/pkg/ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz \
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz
+
 # Install openresty
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/openresty-${OPENRESTY_VER}.tar.gz \
     && cd openresty-${OPENRESTY_VER} \
     && ./configure \
@@ -311,25 +333,30 @@ RUN set -x \
         --add-module=${BUILD_DIR}/src/ngx_brotli-${NGX_BROTLI_VER} \
         --with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT' \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && make install \
-    && cd .. \
+    && make install
+
 # Install lua-resty-expr
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/lua-resty-expr-${RESTY_EXPR_VER}.tar.gz \
     && cd lua-resty-expr-${RESTY_EXPR_VER} \
     && install -d ${LUA_LIB}/resty/expr \
-    && install lib/resty/expr/*.lua ${LUA_LIB}/resty/expr \
-    && cd .. \
+    && install lib/resty/expr/*.lua ${LUA_LIB}/resty/expr
+
 # Install lua-resty-ipmatcher
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz \
     && cd lua-resty-ipmatcher-${RESTY_IPMATCHER_VER} \
-    && make install INST_LUADIR=${LUA_LIB} \
-    && cd .. \
+    && make install INST_LUADIR=${LUA_LIB}
+
 # Install lua-resty-radixtree
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz \
     && cd lua-resty-radixtree-${RESTY_RADIXTREE_VER} \
     && make \
-    && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB} \
-    && cd ..
+    && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB}
 
 
 ### Runtime Stage
