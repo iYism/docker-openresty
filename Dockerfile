@@ -2,6 +2,15 @@
 # Maintained by iYism <admin@iyism.com>
 # https://github.com/iYism/docker-openresty
 
+# Define base image (can be overridden with --build-arg)
+ARG BASE_IMAGE=rockylinux/rockylinux:9
+ARG RUNTIME_IMAGE=rockylinux/rockylinux:9-minimal
+
+# Proxy settings (inherit from build environment)
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
 # Define version arguments for OpenResty and its dependencies
 ARG OPENRESTY_VER=1.29.2.2
 ARG ZLIB_VER=1.3.2
@@ -27,7 +36,15 @@ ARG BUILD_DIR=/build/openresty
 
 
 ### Download Stage
-FROM rockylinux:9 AS downloader
+FROM ${BASE_IMAGE} AS downloader
+
+# Proxy settings (inherit from build environment)
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY}
 
 # Set environment variables for the build stage
 ARG OPENRESTY_VER \
@@ -90,7 +107,15 @@ RUN set -x \
 
 
 ### Build Stage
-FROM rockylinux:9 AS builder
+FROM ${BASE_IMAGE} AS builder
+
+# Proxy settings (inherit from build environment)
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY}
 
 ARG OPENRESTY_VER \
     ZLIB_VER \
@@ -360,7 +385,15 @@ RUN set -x \
 
 
 ### Runtime Stage
-FROM rockylinux:9-minimal
+FROM ${RUNTIME_IMAGE}
+
+# Proxy settings (inherit from build environment)
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY}
 
 ARG USER \
     CONF_DIR \
