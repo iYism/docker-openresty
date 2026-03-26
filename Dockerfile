@@ -22,6 +22,7 @@ ARG BROTLI_VER=1.2.0
 ARG NGX_BROTLI_VER=master
 ARG NGX_GEOIP2_VER=3.4
 ARG RESTY_EXPR_VER=1.3.2
+ARG RESTY_HTTP_VER=0.2.3
 ARG RESTY_IPMATCHER_VER=0.6.1
 ARG RESTY_RADIXTREE_VER=2.9.2
 
@@ -57,6 +58,7 @@ ARG OPENRESTY_VER \
     NGX_BROTLI_VER \
     NGX_GEOIP2_VER \
     RESTY_EXPR_VER \
+    RESTY_HTTP_VER \
     RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER \
     USER \
@@ -100,6 +102,8 @@ RUN set -x \
     && curl -Lo ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
 # Download lua-resty-expr
     && curl -Lo lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
+# Download lua-resty-http
+    && curl -Lo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
 # Download lua-resty-ipmatcher
     && curl -Lo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
@@ -108,14 +112,6 @@ RUN set -x \
 
 ### Build Stage
 FROM ${BASE_IMAGE} AS builder
-
-# Proxy settings (inherit from build environment)
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY}
 
 ARG OPENRESTY_VER \
     ZLIB_VER \
@@ -127,6 +123,7 @@ ARG OPENRESTY_VER \
     NGX_BROTLI_VER \
     NGX_GEOIP2_VER \
     RESTY_EXPR_VER \
+    RESTY_HTTP_VER \
     RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER \
     USER \
@@ -147,6 +144,7 @@ ENV OPENRESTY_VER=$OPENRESTY_VER \
     NGX_BROTLI_VER=$NGX_BROTLI_VER \
     NGX_GEOIP2_VER=$NGX_GEOIP2_VER \
     RESTY_EXPR_VER=$RESTY_EXPR_VER \
+    RESTY_HTTP_VER=$RESTY_HTTP_VER \
     RESTY_IPMATCHER_VER=$RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER=$RESTY_RADIXTREE_VER \
     USER=$USER \
@@ -163,7 +161,7 @@ WORKDIR ${BUILD_DIR}
 
 RUN set -x \
 # Install development packages
-    && dnf -q -d 0 install -y make cmake gcc gcc-c++ autoconf automake perl patch \
+    && dnf install -y make cmake gcc gcc-c++ autoconf automake perl patch \
         diffutils libtool procps-ng gd-devel libxslt-devel libxml2-devel
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
@@ -368,6 +366,13 @@ RUN set -x \
     && install -d ${LUA_LIB}/resty/expr \
     && install lib/resty/expr/*.lua ${LUA_LIB}/resty/expr
 
+# Install lua-resty-http
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-http-${RESTY_HTTP_VER}.tar.gz \
+    && cd lua-resty-http-${RESTY_HTTP_VER} \
+    && make install INST_LUADIR=${LUA_LIB}
+
 # Install lua-resty-ipmatcher
 RUN set -x \
     && cd ${BUILD_DIR}/src \
@@ -386,14 +391,6 @@ RUN set -x \
 
 ### Runtime Stage
 FROM ${RUNTIME_IMAGE}
-
-# Proxy settings (inherit from build environment)
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY}
 
 ARG USER \
     CONF_DIR \

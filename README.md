@@ -11,6 +11,7 @@ A high-performance, source-compiled OpenResty Docker image built on Enterprise L
 > **Important:** This image requires **Enterprise Linux 9 or later** as the base OS, including:
 > - Rocky Linux 9 / 10
 > - AlmaLinux 9 / 10
+> - CentOS Stream 9 / 10
 > - Red Hat Enterprise Linux 9 / 10
 >
 > EL8 and earlier versions are **not supported**.
@@ -158,6 +159,7 @@ docker buildx build \
 | `NGX_BROTLI_VER` | `master` | nginx Brotli module version |
 | `NGX_GEOIP2_VER` | `3.4` | nginx GeoIP2 module version |
 | `RESTY_EXPR_VER` | `1.3.2` | lua-resty-expr version |
+| `RESTY_HTTP_VER` | `0.2.3` | lua-resty-http version |
 | `RESTY_IPMATCHER_VER` | `0.6.1` | lua-resty-ipmatcher version |
 | `RESTY_RADIXTREE_VER` | `2.9.2` | lua-resty-radixtree version |
 
@@ -192,6 +194,7 @@ docker buildx build \
 | Library | Description |
 |---------|-------------|
 | **lua-resty-expr** | Expression evaluator for complex rule matching |
+| **lua-resty-http** | HTTP client library for OpenResty |
 | **lua-resty-ipmatcher** | High-performance IP/CIDR matching |
 | **lua-resty-radixtree** | Radix tree implementation for efficient routing |
 

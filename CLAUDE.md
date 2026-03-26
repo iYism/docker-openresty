@@ -62,6 +62,7 @@ Key build dependencies are compiled to `/opt/openresty/` subdirectories (zlib, p
 - **ngx_brotli** - Brotli compression
 - **ngx_http_geoip2_module** - MaxMind GeoIP2 lookup
 - **lua-resty-expr** - Lua expression evaluator
+- **lua-resty-http** - HTTP client for OpenResty
 - **lua-resty-ipmatcher** - IP matching library
 - **lua-resty-radixtree** - Radix tree router
 
