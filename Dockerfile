@@ -12,7 +12,7 @@ ARG HTTPS_PROXY
 ARG NO_PROXY
 
 # Define version arguments for OpenResty and its dependencies
-ARG OPENRESTY_VER=1.29.2.2
+ARG OPENRESTY_VER=1.29.2.3
 ARG ZLIB_VER=1.3.2
 ARG PCRE2_VER=10.47
 ARG OPENSSL_VER=3.5.5
