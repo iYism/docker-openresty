@@ -149,7 +149,7 @@ docker buildx build \
 | `HTTP_PROXY` | *(none)* | HTTP proxy for network requests |
 | `HTTPS_PROXY` | *(none)* | HTTPS proxy for network requests |
 | `NO_PROXY` | *(none)* | Hosts to bypass proxy |
-| `OPENRESTY_VER` | `1.29.2.2` | OpenResty version |
+| `OPENRESTY_VER` | `1.29.2.5` | OpenResty version |
 | `OPENSSL_VER` | `3.5.5` | OpenSSL version |
 | `ZLIB_VER` | `1.3.2` | zlib compression library version |
 | `PCRE2_VER` | `10.47` | PCRE2 regex library version |
@@ -242,7 +242,7 @@ mkdir -p /var/lib/nginx/lua_cache
 Images are available on Docker Hub:
 
 - `sungyism/openresty:latest` - Latest stable build
-- `sungyism/openresty:1.29.2.2` - Version-specific tag
+- `sungyism/openresty:1.29.2.5` - Version-specific tag
 
 ## Security Considerations
 

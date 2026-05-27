@@ -33,6 +33,30 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Resolve OpenResty image version
+        id: openresty-version
+        env:
+          OPENRESTY_VERSION: ${{ vars.OPENRESTY_VERSION }}
+        run: |
+          dockerfile_version="$(awk -F= '/^ARG OPENRESTY_VER=/{print $2; exit}' Dockerfile)"
+          configured_version="${OPENRESTY_VERSION}"
+
+          if [ -z "${dockerfile_version}" ]; then
+            echo "OPENRESTY_VER is not defined in Dockerfile" >&2
+            exit 1
+          fi
+
+          if [ -z "${configured_version}" ]; then
+            image_version="${dockerfile_version}"
+          else
+            image_version="$(printf '%s\n%s\n' "${configured_version}" "${dockerfile_version}" | sort -V | tail -n 1)"
+          fi
+
+          echo "Dockerfile OpenResty version: ${dockerfile_version}"
+          echo "Configured OpenResty version: ${configured_version:-<empty>}"
+          echo "Resolved image version: ${image_version}"
+          echo "version=${image_version}" >> "${GITHUB_OUTPUT}"
          
       - name: Build and push multi-platform Docker image
         run: |
@@ -40,5 +64,5 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --push \
             -t sungyism/openresty:latest \
-            -t sungyism/openresty:${{ vars.OPENRESTY_VERSION }} \
+            -t sungyism/openresty:${{ steps.openresty-version.outputs.version }} \
             .
