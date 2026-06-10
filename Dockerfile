@@ -16,6 +16,10 @@ ARG OPENRESTY_VER=1.31.1.1
 ARG ZLIB_VER=1.3.2
 ARG PCRE2_VER=10.47
 ARG OPENSSL_VER=3.5.6
+# OpenResty publishes sess_set_get_cb_yield patches per OpenSSL version (e.g. 3.5.5);
+# a patch generally applies to that version and later patch releases in the series.
+# Set this to the latest patch version at or below OPENSSL_VER.
+ARG OPENSSL_PATCH_VER=3.5.5
 ARG GEOIP_VER=1.6.12
 ARG LIBMAXMINDDB_VER=1.13.3
 ARG BROTLI_VER=1.2.0
@@ -52,6 +56,7 @@ ARG OPENRESTY_VER \
     ZLIB_VER \
     PCRE2_VER \
     OPENSSL_VER \
+    OPENSSL_PATCH_VER \
     GEOIP_VER \
     LIBMAXMINDDB_VER \
     BROTLI_VER \
@@ -83,13 +88,8 @@ RUN set -x \
     && curl -Lo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
     && curl -Lo openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
-# Download openssl sess_set_get_cb_yield.patch
-    && STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -LI https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch); \
-       if [ "${STATUS_CODE:-0}" -eq 200 ]; then \
-           curl -Lo openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch ; \
-       else \
-           curl -Lo openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-"${OPENSSL_VER%.*}.0"-sess_set_get_cb_yield.patch ; \
-       fi \
+# Download openssl sess_set_get_cb_yield.patch (version pinned via OPENSSL_PATCH_VER)
+    && curl -fLo openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
 # Download GeoIP
     && curl -Lo GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
 # Download libmaxminddb
@@ -117,6 +117,7 @@ ARG OPENRESTY_VER \
     ZLIB_VER \
     PCRE2_VER \
     OPENSSL_VER \
+    OPENSSL_PATCH_VER \
     GEOIP_VER \
     LIBMAXMINDDB_VER \
     BROTLI_VER \
@@ -138,6 +139,7 @@ ENV OPENRESTY_VER=$OPENRESTY_VER \
     ZLIB_VER=$ZLIB_VER \
     PCRE2_VER=$PCRE2_VER \
     OPENSSL_VER=$OPENSSL_VER \
+    OPENSSL_PATCH_VER=$OPENSSL_PATCH_VER \
     GEOIP_VER=$GEOIP_VER \
     LIBMAXMINDDB_VER=$LIBMAXMINDDB_VER \
     BROTLI_VER=$BROTLI_VER \
@@ -220,7 +222,7 @@ RUN set -x \
     && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/openssl-${OPENSSL_VER}.tar.gz \
     && cd openssl-${OPENSSL_VER} \
-    && patch -p1 < ${BUILD_DIR}/pkg/openssl-${OPENSSL_VER}-sess_set_get_cb_yield.patch || exit 1 \
+    && patch -p1 < ${BUILD_DIR}/pkg/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch || exit 1 \
     && ./config \
       shared zlib \
       --prefix=${HOME_DIR}/openssl3 \
