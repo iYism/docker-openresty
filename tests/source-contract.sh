@@ -220,6 +220,9 @@ assert_block_contains cleanup "$cleanup_block" 'exit "$status"'
 cleanup_status_assignments=$(printf '%s\n' "$cleanup_block" | grep -E -c '^[[:space:]]+status=' || true)
 [ "$cleanup_status_assignments" -eq 2 ] \
     || fail "cleanup must preserve the original status and only upgrade success to failure"
+cleanup_failure_assignments=$(printf '%s\n' "$cleanup_block" | grep -F -c 'cleanup_failed=1' || true)
+[ "$cleanup_failure_assignments" -eq 2 ] \
+    || fail "cleanup must record both evidence and container-removal failures"
 
 wait_pid_block=$(function_block wait_pid_gone "$IMAGE_CONTRACT")
 [ -n "$wait_pid_block" ] || fail "missing function: wait_pid_gone"
