@@ -415,15 +415,15 @@ RUN set -x \
     && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB}
 
 # Install lua-resty-events
-RUN set -x \
+RUN set -eux \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
     && install -d ${LUA_LIB}/resty/events/compat ${HOME_DIR}/licenses/lua-resty-events \
     && for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do \
-         install -m 0644 ${src}/lualib/resty/events/${file} ${LUA_LIB}/resty/events/${file}; \
+         install -m 0644 "${src}/lualib/resty/events/${file}" "${LUA_LIB}/resty/events/${file}"; \
        done \
-    && install -m 0644 ${src}/lualib/resty/events/compat/init.lua ${LUA_LIB}/resty/events/compat/init.lua \
-    && install -m 0644 ${src}/LICENSE ${HOME_DIR}/licenses/lua-resty-events/LICENSE
+    && install -m 0644 "${src}/lualib/resty/events/compat/init.lua" "${LUA_LIB}/resty/events/compat/init.lua" \
+    && install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"
 
 
 ### Runtime Stage

@@ -95,6 +95,7 @@ Pre-existing floating inputs such as Rocky tags, `NGX_BROTLI_VER=master`, the Op
 | `dependencies/lua-resty-events.files.sha256` | Closed upstream file inventory and per-file hashes |
 | `Dockerfile` | Verify both archives, statically link the CORE module, and install exact Lua/license files |
 | `tests/source-contract.sh` | Offline provenance, checksum-order, static-link, and allowlist contract |
+| `tests/events-archive-contract.sh` | Verify the locked archive bytes directly against the per-file manifest |
 | `tests/fixtures/events/nginx.conf` | Real two-worker and privileged-agent runtime fixture |
 | `tests/image-contract.sh` | Runtime behavior, generation-aware HUP, and final-image content checks |
 | `tests/inventory-contract.sh` | Full baseline/new configure, Lua, and image-config comparison |
@@ -111,6 +112,7 @@ Pre-existing floating inputs such as Rocky tags, `NGX_BROTLI_VER=master`, the Op
 - Create: `dependencies/lua-resty-events.lock`
 - Create: `dependencies/lua-resty-events.files.sha256`
 - Create: `tests/source-contract.sh`
+- Create: `tests/events-archive-contract.sh`
 - Modify: `Dockerfile`
 
 - [ ] **Step 1: Write the exact lock files**
@@ -145,22 +147,22 @@ Create `dependencies/lua-resty-events.files.sha256` exactly:
 aa9c2870e477001cfa5e3a3dfd3c86c1190cc985a8ed506e9c1e05537e524cdc  LICENSE
 078c9ec0ad288036930780e1c5817f8b73238f31b191950723e82ea3cf7f1017  config
 0c5058102c567e69b10dda5f34fc704411069c11fb8746b36eed82f4d470c6e5  src/ngx_lua_events_module.c
-419809989b36e088cc262370d786979cd226e4e47a18531499f61dd84c6eb19f  lualib/resty/events/broker.lua
-d197ff6341b73df53fd88b0f0ec02c75684b257bb24f90d35012d8f0bfd06efd  lualib/resty/events/callback.lua
-0a7f47fb2b75b0316fa8b509ebd45809ff63c565b8770ce0f908705b71ca2f94  lualib/resty/events/codec.lua
-ae455426fc755d828e5fab9d62817164b5c5c199ba6b89b4dcdf4285085bcddd  lualib/resty/events/compat/init.lua
-36e04852ab95e3b2819f1284a419ca7e3d227b12554ee753a02f5be0a7171766  lualib/resty/events/disable_listening.lua
-56a61213554cabd4ed7f3ecf99234cf5a2eef80768d32aa0f66884d633e544a9  lualib/resty/events/frame.lua
-68a47d7f0470dcb41b06133e11cb13cde9796cbb10640c6d577d584bd44c4c84  lualib/resty/events/init.lua
-a1575e0410c8e58b74639b44bbfff81289e8d2084a66a2a095fa74aa2ceb58e6  lualib/resty/events/protocol.lua
-95ac57abf952524c8a43d187bdcc933c589f7ea6c8e4ca1b88a702792e27c232  lualib/resty/events/queue.lua
-201c9d7afb5533dde344a46f818e94f5e1540894e0aa08381898ac1c01720c55  lualib/resty/events/utils.lua
-a2a9fbc8fe5cab970eebf679d7bc6cf61b23a69270466b80f1b18fb05f590785  lualib/resty/events/worker.lua
+419809cd75356d9eec8b49c7fdd48646940945d9765e299e1219357123b43948  lualib/resty/events/broker.lua
+d197ff17d3702f6ec7424ae8f5963b56cc2499dacf0e92813e85b25f576ab30d  lualib/resty/events/callback.lua
+0a7f3450a57ecbb647f6aebc6515fec725197c8151aacce0ea4f11cf6dd0f0b5  lualib/resty/events/codec.lua
+ae4550a8db1461305f52a85c329f852f09357995184000fc55c84bf19a5f8f8e  lualib/resty/events/compat/init.lua
+36e0a2c31542f0e297f97347788cd5bbf015b6f6b5b965e8ed39153346ac55ba  lualib/resty/events/disable_listening.lua
+56a6c4d87af8fe768f6fee0af7086743939b56dd55c700c7a0f7a92d76c139cb  lualib/resty/events/frame.lua
+68a47c727314e303355a07a18ff69d9e5d037a84cc2cace0eece1f1aba50d312  lualib/resty/events/init.lua
+a157ffe97fa0f1901eef93c52c63b7828b9b42b9f711a56002115d2d19dc495f  lualib/resty/events/protocol.lua
+95ac06ca0883dbd1dab05400ade419bc35e5ca92a91951fde505bea9a7ed8cae  lualib/resty/events/queue.lua
+201c99be705bba54ee85d46b20d425a3f5f4565514702d627c4d6919333f4286  lualib/resty/events/utils.lua
+a2a9f62a94616c2e8f18c6f65b6fbf814b0e7b1aee94bb405b7a71c09e4842a5  lualib/resty/events/worker.lua
 ```
 
 - [ ] **Step 2: Write the failing offline source contract**
 
-Create executable `tests/source-contract.sh`. It must:
+Create executable `tests/source-contract.sh` and `tests/events-archive-contract.sh`. The archive contract accepts the downloaded tarball path, verifies its locked SHA-256, extracts it into a temporary directory, and runs the reviewed per-file manifest against those real bytes. The source contract must:
 
 1. parse every key above and reject missing, duplicate, or changed values;
 2. compare `lua-resty-events.files.sha256` byte-for-byte with the 14-line closed inventory above;
@@ -210,7 +212,7 @@ COPY dependencies/openresty.lock \
      dependencies/lua-resty-events.files.sha256 \
      ${BUILD_DIR}/locks/
 
-RUN set -x \
+RUN set -eux \
     && . ${BUILD_DIR}/locks/openresty.lock \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}" \
@@ -252,10 +254,10 @@ RUN set -x \
     && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
     && install -d ${LUA_LIB}/resty/events/compat ${HOME_DIR}/licenses/lua-resty-events \
     && for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do \
-         install -m 0644 ${src}/lualib/resty/events/${file} ${LUA_LIB}/resty/events/${file}; \
+         install -m 0644 "${src}/lualib/resty/events/${file}" "${LUA_LIB}/resty/events/${file}"; \
        done \
-    && install -m 0644 ${src}/lualib/resty/events/compat/init.lua ${LUA_LIB}/resty/events/compat/init.lua \
-    && install -m 0644 ${src}/LICENSE ${HOME_DIR}/licenses/lua-resty-events/LICENSE
+    && install -m 0644 "${src}/lualib/resty/events/compat/init.lua" "${LUA_LIB}/resty/events/compat/init.lua" \
+    && install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"
 ```
 
 Do not use LuaRocks, a branch URL, a second C-source copy, or a dynamic module.
@@ -263,8 +265,9 @@ Do not use LuaRocks, a branch URL, a second C-source copy, or a dynamic module.
 - [ ] **Step 4: Run the source contract green**
 
 ```bash
-sh -n tests/source-contract.sh
+sh -n tests/source-contract.sh tests/events-archive-contract.sh
 tests/source-contract.sh
+tests/events-archive-contract.sh /path/to/the/downloaded/pinned/events-archive.tar.gz
 git diff --check
 ```
 
@@ -273,7 +276,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit the provenance/build slice locally**
 
 ```bash
-git add dependencies Dockerfile tests/source-contract.sh
+git add dependencies Dockerfile tests/source-contract.sh tests/events-archive-contract.sh
 git commit -m "build: add pinned lua-resty-events core module"
 ```
 
@@ -305,7 +308,7 @@ local events = require("resty.events")
 assert(events._VERSION == "0.3.1")
 assert(require("resty.events.protocol"))
 assert(require("resty.events.queue"))
-assert(require("resty.expr"))
+assert(require("resty.expr.v1"))
 assert(require("resty.ipmatcher"))
 assert(require("resty.radixtree"))
 local ok = pcall(require, "resty.http")
