@@ -18,6 +18,7 @@ This is the repository-local prerequisite required by the approved Ngatex Gatewa
 - Work occurs only in the dedicated `docker-openresty` branch/worktree created from `74c291a27664a1c27232d4020de7ba52e7c17cc0`.
 - Do not edit, clean, reset, delete, or reuse the user's original `ngatex` or `docker-openresty` working directories.
 - Do not push any intermediate commit while the old workflow can publish from pull requests. The CI safety change in Task 3 must be present and all local gates must pass before the first push.
+- Local development and runtime verification on the Apple Silicon host build only the native `linux/arm64` image. Do not perform a local multi-platform build or emulate amd64; the required amd64 evidence is produced only by the CI matrix before publication.
 - This plan does not edit Ngatex. Ngatex resumes at Phase 2A Task 1 only after the immutable image digest and evidence are accepted.
 
 ## Reviewed immutable inputs
@@ -396,10 +397,10 @@ Use temporary files and `diff -u`; preserve the diff in `${EVIDENCE_DIR}` on fai
 
 ```bash
 sh -n tests/source-contract.sh tests/image-contract.sh tests/inventory-contract.sh
-docker build -t sungyism/openresty:events-contract .
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
 tests/source-contract.sh
-tests/image-contract.sh sungyism/openresty:events-contract
-tests/inventory-contract.sh sungyism/openresty:events-contract
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
 git diff --check
 ```
 
@@ -584,9 +585,9 @@ Write `release-evidence.json` with source commit, run id/attempt, workflow URL, 
 sh -n tests/*.sh
 tests/source-contract.sh
 tests/workflow-contract.sh
-docker build -t sungyism/openresty:events-contract .
-tests/image-contract.sh sungyism/openresty:events-contract
-tests/inventory-contract.sh sungyism/openresty:events-contract
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
 git diff --check
 ```
 
@@ -638,9 +639,9 @@ Document the exact local gate:
 ```bash
 tests/source-contract.sh
 tests/workflow-contract.sh
-docker build -t sungyism/openresty:events-contract .
-tests/image-contract.sh sungyism/openresty:events-contract
-tests/inventory-contract.sh sungyism/openresty:events-contract
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
 ```
 
 - [ ] **Step 3: Run every local gate**
@@ -650,9 +651,9 @@ sh -n tests/*.sh
 tests/source-contract.sh
 tests/workflow-contract.sh
 tests/docs-contract.sh
-docker build -t sungyism/openresty:events-contract .
-tests/image-contract.sh sungyism/openresty:events-contract
-tests/inventory-contract.sh sungyism/openresty:events-contract
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
 git diff --check
 ```
 
@@ -676,9 +677,9 @@ sh -n tests/*.sh
 tests/source-contract.sh
 tests/workflow-contract.sh
 tests/docs-contract.sh
-docker build -t sungyism/openresty:events-contract .
-tests/image-contract.sh sungyism/openresty:events-contract
-tests/inventory-contract.sh sungyism/openresty:events-contract
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
 git diff --check
 git status --short
 ```
