@@ -18,13 +18,6 @@ fail() {
     exit 1
 }
 
-assert_contains() {
-    pattern=$1
-    file=$2
-    grep -F -- "$pattern" "$file" >/dev/null \
-        || fail "${file#${ROOT}/} missing: ${pattern}"
-}
-
 assert_not_contains() {
     pattern=$1
     file=$2
@@ -33,13 +26,51 @@ assert_not_contains() {
     fi
 }
 
-assert_exact_line() {
+visible_document() {
+    awk '
+        in_comment {
+            if (/-->/) {
+                in_comment = 0
+            }
+            next
+        }
+        /<!--/ {
+            if ($0 !~ /-->/) {
+                in_comment = 1
+            }
+            next
+        }
+        { print }
+    ' "$1"
+}
+
+assert_visible_exact_line() {
     expected=$1
     line=$2
     file=$3
-    actual=$(grep -F -x -c -- "$line" "$file" || true)
+    actual=$(visible_document "$file" | grep -F -x -c -- "$line" || true)
     [ "$actual" -eq "$expected" ] \
-        || fail "${file#${ROOT}/} expected ${expected} exact line(s): ${line}; found ${actual}"
+        || fail "${file#${ROOT}/} expected ${expected} visible exact line(s): ${line}; found ${actual}"
+}
+
+assert_visible_not_matches() {
+    pattern=$1
+    file=$2
+    if visible_document "$file" | grep -E -- "$pattern" >/dev/null; then
+        fail "${file#${ROOT}/} contains a stale visible version matching: ${pattern}"
+    fi
+}
+
+assert_docker_code_count() {
+    expected=$1
+    pattern=$2
+    actual=$(awk -v pattern="$pattern" '
+        /^[[:space:]]*#/ { next }
+        index($0, pattern) { count++ }
+        END { print count + 0 }
+    ' "$DOCKERFILE")
+    [ "$actual" -eq "$expected" ] \
+        || fail "Dockerfile expected ${expected} code occurrence(s) of: ${pattern}; found ${actual}"
 }
 
 docker_arg_default() {
@@ -59,13 +90,11 @@ docker_arg_default() {
 }
 
 narrative_text() {
-    awk '
+    visible_document "$1" | awk '
         /^```/ { in_fence = !in_fence; next }
         in_fence { next }
-        /<!--/ { in_comment = 1 }
-        !in_comment { print }
-        in_comment && /-->/ { in_comment = 0 }
-    ' "$1"
+        { print }
+    '
 }
 
 assert_narrative_contains() {
@@ -79,7 +108,7 @@ assert_narrative_contains() {
 }
 
 extract_local_gate() {
-    awk '
+    visible_document "$1" | awk '
         $0 == "### Local ARM64 verification gate" { heading_count++; after_heading=1; next }
         after_heading && $0 == "```bash" { in_gate=1; after_heading=0; next }
         in_gate && $0 == "```" { in_gate=0; complete=1; next }
@@ -89,7 +118,7 @@ extract_local_gate() {
                 exit 1
             }
         }
-    ' "$1" || fail "${1#${ROOT}/} must contain one complete Local ARM64 verification gate"
+    ' || fail "${1#${ROOT}/} must contain one complete visible Local ARM64 verification gate"
 }
 
 assert_no_invented_digest() {
@@ -114,17 +143,19 @@ events_version=$(awk -F= '$1 == "RESTY_EVENTS_VERSION" { count++; value=$2 } END
     || fail "lua-resty-events lock must define exactly one version"
 [ "$events_version" = 0.3.1 ] || fail "unexpected lua-resty-events version: ${events_version}"
 
-assert_exact_line 1 "| \`OPENRESTY_VER\` | \`${openresty_version}\` | OpenResty version |" "$README"
-assert_exact_line 1 "| \`OPENSSL_VER\` | \`${openssl_version}\` | OpenSSL version |" "$README"
-assert_not_contains '| `OPENRESTY_VER` | `1.29.2.5` |' "$README"
-assert_not_contains '| `OPENSSL_VER` | `3.5.5` | OpenSSL version |' "$README"
-assert_not_contains 'sungyism/openresty:1.29.2.5' "$README"
+assert_visible_exact_line 1 "| \`OPENRESTY_VER\` | \`${openresty_version}\` | OpenResty version |" "$README"
+assert_visible_exact_line 1 "| \`OPENSSL_VER\` | \`${openssl_version}\` | OpenSSL version |" "$README"
 assert_not_contains 'Runs as non-root user `openresty` (UID 101) by default' "$README"
 assert_not_contains '| **lua-resty-http** | HTTP client library for OpenResty |' "$README"
 assert_not_contains '- **lua-resty-http** - HTTP client for OpenResty' "$CLAUDE"
 
-assert_contains 'useradd -r -u 101 -g $USER' "$DOCKERFILE"
-assert_contains '--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \' "$DOCKERFILE"
+for document in "$README" "$CLAUDE"; do
+    assert_visible_not_matches '(^|[^0-9.])1[.]29[.]2[.]5([^0-9.]|$)' "$document"
+    assert_visible_not_matches '(^|[^0-9.])3[.]5[.]5([^0-9.]|$)' "$document"
+done
+
+assert_docker_code_count 1 'useradd -r -u 101 -g $USER'
+assert_docker_code_count 1 '--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \'
 
 runtime_stage_summary=$(awk '
     /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
@@ -152,6 +183,7 @@ http_sentence='`resty.http` is absent from this base image.'
 user_sentence='The `openresty` UID 101 account exists, but the final runtime stage has no `USER` instruction, so the default container process runs as root.'
 tag_sentence='The `latest` and version tags are convenience selectors; production consumers resolve and pin the tested immutable digest.'
 digest_sentence='Immutable references start with `sungyism/openresty:1.31.1.1@sha256:` and the digest must come from verified release evidence.'
+version_rule_sentence='The release workflow freezes its public version to `dependencies/openresty.lock`. If the repository variable `OPENRESTY_VERSION` is configured, it must be empty or exactly match the reviewed lock; it is never used to select a newer version.'
 
 expected_gate='tests/source-contract.sh
 tests/workflow-contract.sh
@@ -171,5 +203,8 @@ for document in "$README" "$CLAUDE"; do
     [ "$actual_gate" = "$expected_gate" ] \
         || fail "${document#${ROOT}/} local ARM64 verification gate is incomplete or out of order"
 done
+
+claude_narrative=$(narrative_text "$CLAUDE")
+assert_narrative_contains CLAUDE.md "$claude_narrative" "$version_rule_sentence"
 
 printf 'docs-contract: PASS\n'
