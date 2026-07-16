@@ -1,8 +1,102 @@
 # Ngatex Gateway Runtime Phase 2 Handoff
 
 **Recorded:** 2026-07-16 15:15:54 +0800  
-**Updated:** 2026-07-16 17:45:24 +0800
-**Status:** Task 3 CI implementation is complete and re-reviewed. Stop before Task 4; no push or registry publication has occurred.
+**Updated:** 2026-07-16 18:33:22 +0800
+**Status:** Task 4 documentation synchronization is complete and independently approved. Task 5 is next; no push or registry publication has occurred yet.
+
+## 2026-07-16 18:33 Task 4 completion and review update
+
+Task 4 continued in the same persistent worktree and object store:
+
+```text
+Git common directory: /Users/jiangmeng/GitProjects/docker-openresty/.git
+persistent worktree: /Users/jiangmeng/GitProjects/docker-openresty-phase2-events-resume-20260716
+branch: codex/ngatex-phase2-events-base-resume-20260716
+reviewed code head before this handoff update: ce1fa860179939660e31808dad5d2459db7cdc49
+```
+
+The original `/Users/jiangmeng/GitProjects/docker-openresty` worktree remains
+clean on `main` at `74c291a`. The old resume worktree remains intact and clean
+at `3f68c45`, with its Git common directory still at
+`/private/tmp/docker-openresty-phase2-plan-repo/.git`. No old worktree or
+temporary Git object store was removed.
+
+Task 4 was implemented and hardened as these local commits:
+
+```text
+9134018 docs: document events-capable image contract
+9ff321a test: harden documentation contract
+ce1fa86 test: lock documentation structure
+```
+
+The documentation contract was written before the documentation changes. Its
+first run produced the required TDD red result against the stale README:
+
+```text
+docs-contract: FAIL: README.md expected 1 exact line(s): | `OPENRESTY_VER` | `1.31.1.1` | OpenResty version |; found 0
+```
+
+The synchronized README and maintainer guide now document:
+
+- OpenResty `1.31.1.1`, OpenSSL `3.5.6`, and `lua-resty-events` `0.3.1`;
+- the statically linked CORE `ngx_lua_events_module`;
+- the exact native ARM64 source/workflow/image/inventory verification gate;
+- `latest` and version tags as convenience selectors only, with production
+  consumers required to resolve and pin the tested immutable digest;
+- the immutable `sungyism/openresty:1.31.1.1@sha256:` reference shape without
+  inventing a future events-image digest;
+- the verified absence of `resty.http` from the runtime inventory despite the
+  legacy source-build input;
+- the real runtime-user behavior: the UID 101 `openresty` account exists, the
+  final stage has no `USER` instruction, and the process defaults to root;
+- the frozen OpenResty lock and exact-match repository-variable rule.
+
+Specification review initially found three blocking contract gaps: HTML
+comments could satisfy some documentation assertions, stale versions in
+arbitrary visible prose were not rejected, and the CLAUDE version-lock rule was
+not enforced. Mutation probes reproduced the false passes before the fixes and
+proved that hidden rows, stale prose, and removal of the lock rule fail after
+the fixes.
+
+The next specification re-review found two further structural gaps: a required
+README row could be moved into a fenced code block, and inert Dockerfile inline
+comments could mimic the UID/module facts. Additional mutation probes reproduced
+both false passes. The contract now extracts rows only from the visible Build
+Arguments section and requires exact trimmed Dockerfile code lines, with the UID
+creation scoped to the final runtime stage.
+
+Fresh complete Task 4 gate at reviewed code head `ce1fa86`:
+
+```text
+sh -n tests/*.sh: PASS
+tests/source-contract.sh: PASS
+tests/workflow-contract.sh: PASS
+tests/docs-contract.sh: PASS
+dash -n tests/docs-contract.sh: PASS
+dash tests/docs-contract.sh: PASS
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .: PASS
+  image id: sha256:60b4bb50ed4d11597d78e4b762c72776eec9b7a12ce1731b1b9a5d6848a8b390
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+  old worker-0/worker-1/privileged PIDs: 2,3,4
+  new worker-0/worker-1/privileged PIDs: 5,6,7
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+git diff --check: PASS
+git status --short: clean
+```
+
+Review order and final result:
+
+```text
+specification re-review at ce1fa86: PASS, blocking findings 0
+code-quality review at ce1fa86: APPROVED, blocking 0, important 0, minor 0
+```
+
+No branch has been pushed, no pull request or GitHub matrix run exists, and no
+Docker Hub child, candidate, index, or public tag has been published yet. The
+user has now authorized uninterrupted execution of the approved plan. Task 5
+must still start with its clean pre-push gate and full repository review before
+the first push; publication and Ngatex Phase 2A remain behind their documented
+gates.
 
 ## 2026-07-16 17:45 Task 3 completion and review update
 
