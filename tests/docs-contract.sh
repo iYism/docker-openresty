@@ -44,15 +44,6 @@ visible_document() {
     ' "$1"
 }
 
-assert_visible_exact_line() {
-    expected=$1
-    line=$2
-    file=$3
-    actual=$(visible_document "$file" | grep -F -x -c -- "$line" || true)
-    [ "$actual" -eq "$expected" ] \
-        || fail "${file#${ROOT}/} expected ${expected} visible exact line(s): ${line}; found ${actual}"
-}
-
 assert_visible_not_matches() {
     pattern=$1
     file=$2
@@ -61,16 +52,46 @@ assert_visible_not_matches() {
     fi
 }
 
-assert_docker_code_count() {
+assert_docker_trimmed_line_count() {
     expected=$1
-    pattern=$2
-    actual=$(awk -v pattern="$pattern" '
+    line=$2
+    scope=$3
+    actual=$(awk -v expected="$line" -v scope="$scope" '
+        toupper($1) == "FROM" {
+            in_runtime=($2 == "${RUNTIME_IMAGE}")
+        }
         /^[[:space:]]*#/ { next }
-        index($0, pattern) { count++ }
+        scope == "runtime" && !in_runtime { next }
+        {
+            candidate=$0
+            sub(/^[[:space:]]+/, "", candidate)
+            sub(/[[:space:]]+$/, "", candidate)
+            if (candidate == expected) {
+                count++
+            }
+        }
         END { print count + 0 }
     ' "$DOCKERFILE")
     [ "$actual" -eq "$expected" ] \
-        || fail "Dockerfile expected ${expected} code occurrence(s) of: ${pattern}; found ${actual}"
+        || fail "Dockerfile expected ${expected} exact ${scope} code line(s): ${line}; found ${actual}"
+}
+
+readme_build_arguments() {
+    visible_document "$README" | awk '
+        /^```/ { in_fence = !in_fence; next }
+        !in_fence && $0 == "## Build Arguments" {
+            heading_count++
+            in_section=1
+            next
+        }
+        !in_fence && in_section && /^## / { in_section=0 }
+        in_section && !in_fence { print }
+        END {
+            if (heading_count != 1) {
+                exit 1
+            }
+        }
+    ' || fail "README.md must contain one visible Build Arguments section"
 }
 
 docker_arg_default() {
@@ -143,8 +164,15 @@ events_version=$(awk -F= '$1 == "RESTY_EVENTS_VERSION" { count++; value=$2 } END
     || fail "lua-resty-events lock must define exactly one version"
 [ "$events_version" = 0.3.1 ] || fail "unexpected lua-resty-events version: ${events_version}"
 
-assert_visible_exact_line 1 "| \`OPENRESTY_VER\` | \`${openresty_version}\` | OpenResty version |" "$README"
-assert_visible_exact_line 1 "| \`OPENSSL_VER\` | \`${openssl_version}\` | OpenSSL version |" "$README"
+build_arguments=$(readme_build_arguments)
+for row in \
+    "| \`OPENRESTY_VER\` | \`${openresty_version}\` | OpenResty version |" \
+    "| \`OPENSSL_VER\` | \`${openssl_version}\` | OpenSSL version |"
+do
+    row_count=$(printf '%s\n' "$build_arguments" | grep -F -x -c -- "$row" || true)
+    [ "$row_count" -eq 1 ] \
+        || fail "README.md Build Arguments table expected one exact row: ${row}; found ${row_count}"
+done
 assert_not_contains 'Runs as non-root user `openresty` (UID 101) by default' "$README"
 assert_not_contains '| **lua-resty-http** | HTTP client library for OpenResty |' "$README"
 assert_not_contains '- **lua-resty-http** - HTTP client for OpenResty' "$CLAUDE"
@@ -154,8 +182,10 @@ for document in "$README" "$CLAUDE"; do
     assert_visible_not_matches '(^|[^0-9.])3[.]5[.]5([^0-9.]|$)' "$document"
 done
 
-assert_docker_code_count 1 'useradd -r -u 101 -g $USER'
-assert_docker_code_count 1 '--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \'
+assert_docker_trimmed_line_count 1 \
+    '&& getent passwd $USER >/dev/null || useradd -r -u 101 -g $USER -s /sbin/nologin \' runtime
+assert_docker_trimmed_line_count 1 \
+    '--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \' all
 
 runtime_stage_summary=$(awk '
     /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
