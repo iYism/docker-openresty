@@ -2,67 +2,397 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
-      - "Dockerfile"
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'dependencies/**'
+      - 'tests/**'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - '.github/workflows/docker-image.yml'
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
     paths:
-      - "Dockerfile"
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'dependencies/**'
+      - 'tests/**'
+      - 'README.md'
+      - 'CLAUDE.md'
+      - '.github/workflows/docker-image.yml'
+
+permissions:
+  contents: read
 
 jobs:
-
-  build:
-    environment: "build-image"
-    runs-on: ubuntu-latest
-
+  source-contract:
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Validate source and workflow contracts
+        run: |
+          sh -n tests/*.sh
+          tests/source-contract.sh
+          tests/workflow-contract.sh
+
+  build-test:
+    needs: source-contract
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Set up QEMU
-        # Add support for more platforms with QEMU (optional)
-        # https://github.com/docker/setup-qemu-action
-        uses: docker/setup-qemu-action@v3
-        
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-    
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+        with:
+          version: v0.35.0
+          driver-opts: |
+            image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - name: Build and verify ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          image="sungyism/openresty:verify-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}"
+          evidence_dir="$RUNNER_TEMP/evidence-${{ matrix.arch }}"
+          mkdir -p "$evidence_dir"
+
+          docker buildx build --platform "${{ matrix.platform }}" --load -t "$image" .
+          test "$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')" = "${{ matrix.platform }}"
+          EVIDENCE_DIR="$evidence_dir" tests/image-contract.sh "$image" "${{ matrix.platform }}"
+          EVIDENCE_DIR="$evidence_dir" tests/inventory-contract.sh "$image" "${{ matrix.platform }}"
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [source-contract, build-test]
+    environment: build-image
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: openresty-release-main
+      cancel-in-progress: false
+    env:
+      REPO: docker.io/sungyism/openresty
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Isolate Docker credentials
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/docker-config"
+          mkdir -p "$docker_config"
+          printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+        with:
+          version: v0.35.0
+          driver-opts: |
+            image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Resolve OpenResty image version
-        id: openresty-version
+      - name: Verify current main tip
+        run: |
+          set -euo pipefail
+          remote_head=$(git ls-remote https://github.com/iYism/docker-openresty.git refs/heads/main | awk '{print $1}')
+          test "$remote_head" = "$GITHUB_SHA"
+
+      - name: Build and test immutable children
+        id: children
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/release-evidence"
+          mkdir -p "$evidence_root"
+          : > "$RUNNER_TEMP/children.env"
+
+          for item in linux/amd64:amd64 linux/arm64:arm64; do
+            platform=${item%:*}
+            arch=${item#*:}
+            evidence_dir="$evidence_root/$arch"
+            metadata="$evidence_dir/build-metadata.json"
+            mkdir -p "$evidence_dir"
+
+            docker buildx build \
+              --platform "$platform" \
+              --output "type=image,name=${REPO},push-by-digest=true,name-canonical=true,push=true" \
+              --provenance=false \
+              --sbom=false \
+              --metadata-file "$metadata" \
+              .
+
+            digest=$(jq -er '.["containerimage.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' "$metadata")
+            printf '%s_digest=%s\n' "$arch" "$digest" >> "$RUNNER_TEMP/children.env"
+            immutable="${REPO}@${digest}"
+
+            EVIDENCE_DIR="$evidence_dir" tests/image-contract.sh "$immutable" "$platform" \
+              2>&1 | tee "$evidence_dir/image-contract.log"
+            EVIDENCE_DIR="$evidence_dir" tests/inventory-contract.sh "$immutable" "$platform" \
+              2>&1 | tee "$evidence_dir/inventory-contract.log"
+          done
+
+          . "$RUNNER_TEMP/children.env"
+          printf 'amd64_digest=%s\n' "$amd64_digest" >> "$GITHUB_OUTPUT"
+          printf 'arm64_digest=%s\n' "$arm64_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Validate candidate index and rerun contracts
+        id: index
+        env:
+          AMD64_DIGEST: ${{ steps.children.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ steps.children.outputs.arm64_digest }}
+        run: |
+          set -euo pipefail
+          evidence_root="$RUNNER_TEMP/release-evidence"
+          candidate="${REPO}:candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          docker buildx imagetools create \
+            --metadata-file "$evidence_root/index-metadata.json" \
+            --tag "$candidate" \
+            "${REPO}@${AMD64_DIGEST}" \
+            "${REPO}@${ARM64_DIGEST}"
+
+          index_digest=$(jq -er '.["containerimage.descriptor.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' \
+            "$evidence_root/index-metadata.json")
+          immutable_index="${REPO}@${index_digest}"
+          IMMUTABLE_INDEX=$immutable_index
+          docker buildx imagetools inspect "$immutable_index" --raw > "$evidence_root/index.json"
+
+          descriptor_count=$(jq -er '.manifests | length' "$evidence_root/index.json")
+          test "$descriptor_count" -eq 2
+          actual_pairs=$(jq -er \
+            '[.manifests[] | "\(.platform.os)/\(.platform.architecture)=\(.digest)"] | sort | .[]' \
+            "$evidence_root/index.json")
+          expected_pairs=$(printf '%s\n' \
+            "linux/amd64=${AMD64_DIGEST}" \
+            "linux/arm64=${ARM64_DIGEST}" | sort)
+          test "$actual_pairs" = "$expected_pairs"
+
+          for platform in linux/amd64 linux/arm64; do
+            arch=${platform#linux/}
+            evidence_dir="$evidence_root/index-$arch"
+            mkdir -p "$evidence_dir"
+            EVIDENCE_DIR="$evidence_dir" tests/image-contract.sh "$IMMUTABLE_INDEX" "$platform" \
+              2>&1 | tee "$evidence_dir/image-contract.log"
+            EVIDENCE_DIR="$evidence_dir" tests/inventory-contract.sh "$IMMUTABLE_INDEX" "$platform" \
+              2>&1 | tee "$evidence_dir/inventory-contract.log"
+          done
+
+          printf 'candidate=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
+          printf 'index_digest=%s\n' "$index_digest" >> "$GITHUB_OUTPUT"
+          printf 'immutable_index=%s\n' "$immutable_index" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve immutable release tag
+        id: release
         env:
           OPENRESTY_VERSION: ${{ vars.OPENRESTY_VERSION }}
+          INDEX_DIGEST: ${{ steps.index.outputs.index_digest }}
         run: |
-          dockerfile_version="$(awk -F= '/^ARG OPENRESTY_VER=/{print $2; exit}' Dockerfile)"
-          configured_version="${OPENRESTY_VERSION}"
+          set -euo pipefail
+          configured_openresty_version=${OPENRESTY_VERSION:-}
+          . dependencies/openresty.lock
+          . dependencies/lua-resty-events.lock
 
-          if [ -z "${dockerfile_version}" ]; then
-            echo "OPENRESTY_VER is not defined in Dockerfile" >&2
+          test "$OPENRESTY_VERSION" = "1.31.1.1"
+          test "$RESTY_EVENTS_VERSION" = "0.3.1"
+          if [ -n "$configured_openresty_version" ] && [ "$configured_openresty_version" != "$OPENRESTY_VERSION" ]; then
+            printf 'configured OpenResty version must equal locked version 1.31.1.1\n' >&2
             exit 1
           fi
 
-          if [ -z "${configured_version}" ]; then
-            image_version="${dockerfile_version}"
+          digest_short=${INDEX_DIGEST#sha256:}
+          digest_prefix=${digest_short%${digest_short#????????????}}
+          release="${REPO}:${OPENRESTY_VERSION}-events-${RESTY_EVENTS_VERSION}-sha256-${digest_prefix}"
+
+          collision_error="$RUNNER_TEMP/release-tag-inspect.err"
+          if existing_digest=$(docker buildx imagetools inspect "$release" \
+            --format '{{json .Manifest.Digest}}' 2>"$collision_error"); then
+            existing_digest=$(printf '%s\n' "$existing_digest" | jq -er \
+              'select(type == "string" and test("^sha256:[0-9a-f]{64}$"))')
+            if [ "$existing_digest" != "$INDEX_DIGEST" ]; then
+              printf 'release tag collision: %s is %s, expected %s\n' \
+                "$release" "$existing_digest" "$INDEX_DIGEST" >&2
+              exit 1
+            fi
+          elif grep -E -q '(manifest unknown|not found)' "$collision_error"; then
+            :
           else
-            image_version="$(printf '%s\n%s\n' "${configured_version}" "${dockerfile_version}" | sort -V | tail -n 1)"
+            printf 'unable to prove release tag absence: %s\n' "$release" >&2
+            cat "$collision_error" >&2
+            exit 1
           fi
 
-          echo "Dockerfile OpenResty version: ${dockerfile_version}"
-          echo "Configured OpenResty version: ${configured_version:-<empty>}"
-          echo "Resolved image version: ${image_version}"
-          echo "version=${image_version}" >> "${GITHUB_OUTPUT}"
-         
-      - name: Build and push multi-platform Docker image
+          printf 'version=%s\n' "$OPENRESTY_VERSION" >> "$GITHUB_OUTPUT"
+          printf 'events_version=%s\n' "$RESTY_EVENTS_VERSION" >> "$GITHUB_OUTPUT"
+          printf 'release=%s\n' "$release" >> "$GITHUB_OUTPUT"
+
+      - name: Recheck main tip before promotion
         run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --push \
-            -t sungyism/openresty:latest \
-            -t sungyism/openresty:${{ steps.openresty-version.outputs.version }} \
-            .
+          set -euo pipefail
+          remote_head=$(git ls-remote https://github.com/iYism/docker-openresty.git refs/heads/main | awk '{print $1}')
+          test "$remote_head" = "$GITHUB_SHA"
+
+      - name: Promote tested index
+        env:
+          IMMUTABLE_INDEX: ${{ steps.index.outputs.immutable_index }}
+          INDEX_DIGEST: ${{ steps.index.outputs.index_digest }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE: ${{ steps.release.outputs.release }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${REPO}:latest" \
+            --tag "${REPO}:${VERSION}" \
+            --tag "$RELEASE" \
+            "$IMMUTABLE_INDEX"
+
+          for tag in "${REPO}:latest" "${REPO}:${VERSION}" "$RELEASE"; do
+            actual_digest=$(docker buildx imagetools inspect "$tag" \
+              --format '{{json .Manifest.Digest}}' | jq -er \
+              'select(type == "string" and test("^sha256:[0-9a-f]{64}$"))')
+            test "$actual_digest" = "$INDEX_DIGEST"
+          done
+
+      - name: Write release evidence
+        env:
+          AMD64_DIGEST: ${{ steps.children.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ steps.children.outputs.arm64_digest }}
+          INDEX_DIGEST: ${{ steps.index.outputs.index_digest }}
+          IMMUTABLE_INDEX: ${{ steps.index.outputs.immutable_index }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE: ${{ steps.release.outputs.release }}
+        run: |
+          set -euo pipefail
+          . dependencies/openresty.lock
+          . dependencies/lua-resty-events.lock
+          evidence_root="$RUNNER_TEMP/release-evidence"
+          workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
+
+          jq -n \
+            --arg source_commit "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg workflow_url "$workflow_url" \
+            --arg openresty_sha256 "$OPENRESTY_SHA256" \
+            --arg events_commit "$RESTY_EVENTS_COMMIT" \
+            --arg events_sha256 "$RESTY_EVENTS_SHA256" \
+            --arg events_license_sha256 "$RESTY_EVENTS_LICENSE_SHA256" \
+            --arg baseline_digest 'sha256:3fca0dac0d8d073be2980170a4eda04beb7b4721f6a2ecc65c0a0921ee2a3016' \
+            --arg top_level_digest "$INDEX_DIGEST" \
+            --arg amd64_digest "$AMD64_DIGEST" \
+            --arg arm64_digest "$ARM64_DIGEST" \
+            --arg latest "${REPO}:latest" \
+            --arg version_tag "${REPO}:${VERSION}" \
+            --arg release_tag "$RELEASE" \
+            --arg immutable_index "$IMMUTABLE_INDEX" \
+            '{
+              schema_version: 1,
+              source_commit: $source_commit,
+              run: {id: $run_id, attempt: $run_attempt},
+              workflow_url: $workflow_url,
+              source_hashes: {
+                openresty_sha256: $openresty_sha256,
+                events_commit: $events_commit,
+                events_sha256: $events_sha256,
+                events_license_sha256: $events_license_sha256
+              },
+              baseline_digest: $baseline_digest,
+              top_level_digest: $top_level_digest,
+              immutable_index: $immutable_index,
+              child_digests: {amd64: $amd64_digest, arm64: $arm64_digest},
+              tag_mappings: {
+                latest: {tag: $latest, digest: $top_level_digest},
+                version: {tag: $version_tag, digest: $top_level_digest},
+                release: {tag: $release_tag, digest: $top_level_digest}
+              },
+              contract_results: {
+                source: "passed",
+                workflow: "passed",
+                child_image_amd64: "passed",
+                child_inventory_amd64: "passed",
+                child_image_arm64: "passed",
+                child_inventory_arm64: "passed",
+                index_image_amd64: "passed",
+                index_inventory_amd64: "passed",
+                index_image_arm64: "passed",
+                index_inventory_arm64: "passed",
+                public_tag_digests: "passed"
+              },
+              resolved_inputs: {
+                qemu_action: "docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3",
+                qemu_image: "docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0",
+                buildx_action: "docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5",
+                buildx_version: "v0.35.0",
+                buildkit_image: "moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a"
+              },
+              artifact: {
+                retention_days: 90,
+                digest_reporting: "actions/upload-artifact output and workflow summary"
+              },
+              residual_risks: [
+                "Rocky Linux base image tags remain floating",
+                "NGX_BROTLI_VER=master remains floating",
+                "the OpenResty patch URL remains floating",
+                "unrelated legacy source archives remain unchecksummed",
+                "DNF repository content remains mutable",
+                "main may advance after the final remote-tip check and before registry promotion",
+                "Docker Hub availability and manifest propagation remain external dependencies",
+                "arm64 verification on GitHub-hosted amd64 runners depends on pinned QEMU emulation"
+              ]
+            }' > "$evidence_root/release-evidence.json"
+
+      - name: Upload release evidence
+        id: upload-evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openresty-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Summarize immutable release
+        env:
+          AMD64_DIGEST: ${{ steps.children.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ steps.children.outputs.arm64_digest }}
+          IMMUTABLE_INDEX: ${{ steps.index.outputs.immutable_index }}
+          ARTIFACT_DIGEST: ${{ steps.upload-evidence.outputs.artifact-digest }}
+        run: |
+          {
+            printf '## OpenResty events image release\n\n'
+            printf -- '- Immutable index: `%s`\n' "$IMMUTABLE_INDEX"
+            printf -- '- linux/amd64 child: `%s`\n' "$AMD64_DIGEST"
+            printf -- '- linux/arm64 child: `%s`\n' "$ARM64_DIGEST"
+            printf -- '- Evidence artifact digest: `%s`\n' "$ARTIFACT_DIGEST"
+            printf -- '- Evidence retention: `90 days`\n'
+          } >> "$GITHUB_STEP_SUMMARY"
