@@ -74,14 +74,24 @@ ARG OPENRESTY_VER \
     LUA_LIB \
     BUILD_DIR
 
+COPY dependencies/openresty.lock \
+     dependencies/lua-resty-events.lock \
+     dependencies/lua-resty-events.files.sha256 \
+     ${BUILD_DIR}/locks/
+
 USER root
 WORKDIR ${BUILD_DIR}
 
 RUN set -x \
-    && mkdir -p {pkg,src} \
+    && . ${BUILD_DIR}/locks/openresty.lock \
+    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
+    && test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}" \
+    && mkdir -p ${BUILD_DIR}/pkg ${BUILD_DIR}/src \
     && cd ${BUILD_DIR}/pkg \
 # Download openresty
-    && curl -Lo openresty-${OPENRESTY_VER}.tar.gz https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+        -o openresty-${OPENRESTY_VER}.tar.gz "${OPENRESTY_ARCHIVE}" \
+    && echo "${OPENRESTY_SHA256}  openresty-${OPENRESTY_VER}.tar.gz" | sha256sum -c - \
 # Download zlib
     && curl -Lo zlib-${ZLIB_VER}.tar.gz https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz \
 # Download pcre2
@@ -107,7 +117,11 @@ RUN set -x \
 # Download lua-resty-ipmatcher
     && curl -Lo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
-    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz
+    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
+# Download lua-resty-events
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+        -o lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz "${RESTY_EVENTS_ARCHIVE}" \
+    && echo "${RESTY_EVENTS_SHA256}  lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz" | sha256sum -c -
 
 
 ### Build Stage
@@ -167,6 +181,14 @@ RUN set -x \
         diffutils libtool procps-ng gd-devel libxslt-devel libxml2-devel
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
+
+# Unpack and verify lua-resty-events
+RUN set -x \
+    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz \
+    && cd lua-resty-events-${RESTY_EVENTS_COMMIT} \
+    && sha256sum -c ${BUILD_DIR}/locks/lua-resty-events.files.sha256
 
 # Install zlib
 RUN set -x \
@@ -286,6 +308,7 @@ RUN set -x \
 
 # Install openresty
 RUN set -x \
+    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/openresty-${OPENRESTY_VER}.tar.gz \
     && cd openresty-${OPENRESTY_VER} \
@@ -356,6 +379,7 @@ RUN set -x \
         --with-pcre-jit \
         --add-module=${BUILD_DIR}/src/ngx_http_geoip2_module-${NGX_GEOIP2_VER} \
         --add-module=${BUILD_DIR}/src/ngx_brotli-${NGX_BROTLI_VER} \
+        --add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
         --with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT' \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install
@@ -389,6 +413,17 @@ RUN set -x \
     && cd lua-resty-radixtree-${RESTY_RADIXTREE_VER} \
     && make \
     && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB}
+
+# Install lua-resty-events
+RUN set -x \
+    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
+    && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
+    && install -d ${LUA_LIB}/resty/events/compat ${HOME_DIR}/licenses/lua-resty-events \
+    && for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do \
+         install -m 0644 ${src}/lualib/resty/events/${file} ${LUA_LIB}/resty/events/${file}; \
+       done \
+    && install -m 0644 ${src}/lualib/resty/events/compat/init.lua ${LUA_LIB}/resty/events/compat/init.lua \
+    && install -m 0644 ${src}/LICENSE ${HOME_DIR}/licenses/lua-resty-events/LICENSE
 
 
 ### Runtime Stage
