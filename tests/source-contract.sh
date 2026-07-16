@@ -60,6 +60,27 @@ assert_not_contains() {
     fi
 }
 
+function_block() {
+    name=$1
+    file=$2
+    awk -v signature="${name}() {" '
+        $0 == signature { in_function=1 }
+        in_function { print }
+        in_function && $0 == "}" { exit }
+    ' "$file"
+}
+
+assert_block_contains() {
+    description=$1
+    block=$2
+    pattern=$3
+
+    case "$block" in
+        *"$pattern"*) ;;
+        *) fail "${description} missing control flow: ${pattern}" ;;
+    esac
+}
+
 OPENRESTY_EXPECTED='OPENRESTY_VERSION=1.31.1.1
 OPENRESTY_ARCHIVE=https://openresty.org/download/openresty-1.31.1.1.tar.gz
 OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
@@ -184,6 +205,42 @@ assert_contains 'printf "alive\n"' "$IMAGE_CONTRACT"
 assert_contains 'printf "gone\n"' "$IMAGE_CONTRACT"
 assert_contains 'running=$(docker inspect --format '\''{{.State.Running}}'\'' "$container_id" 2>/dev/null || true)' "$IMAGE_CONTRACT"
 assert_not_contains 'if ! docker exec "$container_id" /bin/sh -c "kill -0 ${pid}"' "$IMAGE_CONTRACT"
+
+cleanup_block=$(function_block cleanup "$IMAGE_CONTRACT")
+[ -n "$cleanup_block" ] || fail "missing function: cleanup"
+assert_block_contains cleanup "$cleanup_block" 'status=$?'
+assert_block_contains cleanup "$cleanup_block" 'cleanup_failed=0'
+assert_block_contains cleanup "$cleanup_block" 'if ! persist_evidence; then'
+assert_block_contains cleanup "$cleanup_block" 'image-contract: cleanup: unable to persist fixture evidence'
+assert_block_contains cleanup "$cleanup_block" 'if ! remove_container; then'
+assert_block_contains cleanup "$cleanup_block" 'image-contract: cleanup: unable to remove fixture container %s'
+assert_block_contains cleanup "$cleanup_block" 'if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then'
+assert_block_contains cleanup "$cleanup_block" 'status=1'
+assert_block_contains cleanup "$cleanup_block" 'exit "$status"'
+cleanup_status_assignments=$(printf '%s\n' "$cleanup_block" | grep -E -c '^[[:space:]]+status=' || true)
+[ "$cleanup_status_assignments" -eq 2 ] \
+    || fail "cleanup must preserve the original status and only upgrade success to failure"
+
+wait_pid_block=$(function_block wait_pid_gone "$IMAGE_CONTRACT")
+[ -n "$wait_pid_block" ] || fail "missing function: wait_pid_gone"
+assert_block_contains wait_pid_gone "$wait_pid_block" 'if state=$(pid_process_state "$pid" 2>/dev/null); then'
+assert_block_contains wait_pid_gone "$wait_pid_block" 'gone) return 0 ;;'
+assert_block_contains wait_pid_gone "$wait_pid_block" 'alive) ;;'
+assert_block_contains wait_pid_gone "$wait_pid_block" '*) fail "unexpected process state for old PID ${pid}: ${state}" ;;'
+assert_block_contains wait_pid_gone "$wait_pid_block" 'running=$(docker inspect --format '\''{{.State.Running}}'\'' "$container_id" 2>/dev/null || true)'
+assert_block_contains wait_pid_gone "$wait_pid_block" '|| fail "fixture container stopped while waiting for old PID ${pid}"'
+assert_block_contains wait_pid_gone "$wait_pid_block" 'attempt=$((attempt + 1))'
+assert_block_contains wait_pid_gone "$wait_pid_block" 'fail "unable to prove old process exited after HUP: ${pid}"'
+wait_pid_success_returns=$(printf '%s\n' "$wait_pid_block" | grep -F -c 'return 0' || true)
+[ "$wait_pid_success_returns" -eq 1 ] \
+    || fail "wait_pid_gone may return success only for the explicit gone state"
+
+pid_state_block=$(function_block pid_process_state "$IMAGE_CONTRACT")
+[ -n "$pid_state_block" ] || fail "missing function: pid_process_state"
+assert_block_contains pid_process_state "$pid_state_block" 'docker exec "$container_id" /bin/sh -c '\'''
+assert_block_contains pid_process_state "$pid_state_block" 'if kill -0 "$1" 2>/dev/null; then'
+assert_block_contains pid_process_state "$pid_state_block" 'printf "alive\n"'
+assert_block_contains pid_process_state "$pid_state_block" 'printf "gone\n"'
 
 download_count=$(grep -c '&& curl ' "$DOCKERFILE")
 [ "$download_count" -eq 15 ] || fail "expected 15 source downloads, found ${download_count}"
