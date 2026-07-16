@@ -263,6 +263,10 @@ RUN set -eux \
 ```
 
 Do not use LuaRocks, a branch URL, a second C-source copy, or a dynamic module.
+Keep the installed OpenSSL prefix, but remove its temporary source/build tree in
+the same Dockerfile step after `make install_sw`; this keeps native verification
+viable on the constrained builder disk without deleting any existing image or
+shared cache.
 
 - [ ] **Step 4: Run the source contract green**
 

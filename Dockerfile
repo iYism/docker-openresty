@@ -258,7 +258,8 @@ RUN set -x \
       -L${HOME_DIR}/zlib/lib \
       -Wl,-rpath,${HOME_DIR}/zlib/lib:${HOME_DIR}/openssl3/lib \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; }
+    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; } \
+    && rm -rf "${BUILD_DIR}/src/openssl-${OPENSSL_VER}"
 
 # Install GeoIP
 RUN set -x \

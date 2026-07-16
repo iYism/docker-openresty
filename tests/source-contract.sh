@@ -135,6 +135,8 @@ assert_before 'sha256sum -c ${BUILD_DIR}/locks/lua-resty-events.files.sha256' \
 assert_not_contains 'resty/events/*.lua' "$DOCKERFILE"
 assert_contains 'COPY --from=builder ${HOME_DIR} ${HOME_DIR}' "$DOCKERFILE"
 
+assert_contains 'rm -rf "${BUILD_DIR}/src/openssl-${OPENSSL_VER}"' "$DOCKERFILE"
+
 download_count=$(grep -c '&& curl ' "$DOCKERFILE")
 [ "$download_count" -eq 15 ] || fail "expected 15 source downloads, found ${download_count}"
 if grep '&& curl ' "$DOCKERFILE" \
