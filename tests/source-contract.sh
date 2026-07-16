@@ -133,4 +133,12 @@ assert_contains 'install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-rest
 assert_not_contains 'resty/events/*.lua' "$DOCKERFILE"
 assert_contains 'COPY --from=builder ${HOME_DIR} ${HOME_DIR}' "$DOCKERFILE"
 
+download_count=$(grep -c '&& curl ' "$DOCKERFILE")
+[ "$download_count" -eq 15 ] || fail "expected 15 source downloads, found ${download_count}"
+if grep '&& curl ' "$DOCKERFILE" \
+    | grep -Fv 'curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600' \
+    >/dev/null; then
+    fail "every source download must use the bounded retry policy"
+fi
+
 printf 'source-contract: PASS\n'

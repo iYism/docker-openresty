@@ -93,31 +93,31 @@ RUN set -x \
         -o openresty-${OPENRESTY_VER}.tar.gz "${OPENRESTY_ARCHIVE}" \
     && echo "${OPENRESTY_SHA256}  openresty-${OPENRESTY_VER}.tar.gz" | sha256sum -c - \
 # Download zlib
-    && curl -Lo zlib-${ZLIB_VER}.tar.gz https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o zlib-${ZLIB_VER}.tar.gz https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz \
 # Download pcre2
-    && curl -Lo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
-    && curl -Lo openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
 # Download openssl sess_set_get_cb_yield.patch (version pinned via OPENSSL_PATCH_VER)
-    && curl -fLo openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
 # Download GeoIP
-    && curl -Lo GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
 # Download libmaxminddb
-    && curl -Lo libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
 # Download brotli
-    && curl -Lo brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
 # Download ngx_brotli
-    && curl -Lo ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
 # Download ngx_http_geoip2_module
-    && curl -Lo ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
 # Download lua-resty-expr
-    && curl -Lo lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
 # Download lua-resty-http
-    && curl -Lo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
 # Download lua-resty-ipmatcher
-    && curl -Lo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
-    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
 # Download lua-resty-events
     && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
         -o lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz "${RESTY_EVENTS_ARCHIVE}" \

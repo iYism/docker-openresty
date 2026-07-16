@@ -86,6 +86,8 @@ Out of scope:
 
 Pre-existing floating inputs such as Rocky tags, `NGX_BROTLI_VER=master`, the OpenResty patch URL, unchecksummed unrelated archives, and DNF repositories remain explicit residual risks. The new OpenResty and events inputs are not covered by that exception.
 
+All existing source download URLs and versions stay unchanged, but the clean rebuild may mechanically add the same bounded `curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600` transport policy to them. This is reliability hardening required to complete a from-scratch build, not a dependency upgrade or provenance exception.
+
 ## File map
 
 | Path | Responsibility |
