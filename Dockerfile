@@ -92,12 +92,13 @@ USER root
 WORKDIR ${BUILD_DIR}
 
 RUN set -x \
+    && curl() { command curl --fail --retry 5 --retry-all-errors --connect-timeout 20 "$@"; } \
     && mkdir -p {pkg,src} \
     && cd ${BUILD_DIR}/pkg \
 # Download openresty
     && curl -Lo openresty-${OPENRESTY_VER}.tar.gz https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz \
 # Download zlib
-    && curl -Lo zlib-${ZLIB_VER}.tar.gz https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz \
+    && curl -Lo zlib-${ZLIB_VER}.tar.gz https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib-${ZLIB_VER}.tar.gz \
 # Download pcre2
     && curl -Lo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
