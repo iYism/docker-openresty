@@ -1,8 +1,132 @@
 # Ngatex Gateway Runtime Phase 2 Handoff
 
 **Recorded:** 2026-07-16 15:15:54 +0800  
-**Updated:** 2026-07-16 16:47:25 +0800
-**Status:** Task 2 is complete and re-reviewed. Stop before Task 3; no Task 3 work has started.
+**Updated:** 2026-07-16 17:45:24 +0800
+**Status:** Task 3 CI implementation is complete and re-reviewed. Stop before Task 4; no push or registry publication has occurred.
+
+## 2026-07-16 17:45 Task 3 completion and review update
+
+Task 3 continued only in the persistent worktree and object store established
+before Task 2 completion:
+
+```text
+Git common directory: /Users/jiangmeng/GitProjects/docker-openresty/.git
+persistent worktree: /Users/jiangmeng/GitProjects/docker-openresty-phase2-events-resume-20260716
+branch: codex/ngatex-phase2-events-base-resume-20260716
+reviewed code head before this handoff update: 81db9de050da3c67ae4170c8c5b20478519d4b65
+```
+
+The original `/Users/jiangmeng/GitProjects/docker-openresty` worktree remains
+clean on `main` at `74c291a`. The old resume worktree remains intact and clean
+at `3f68c45`, with its Git common directory still at
+`/private/tmp/docker-openresty-phase2-plan-repo/.git`. No old worktree or
+`/private/tmp` Git data was removed.
+
+Task 3 was implemented as these local commits:
+
+```text
+f701fb1 docs: correct task 3 ci contracts
+d302423 docs: clarify task 3 workflow validity
+edaf18f ci: verify events image before digest promotion
+81db9de test: lock CI credential isolation
+```
+
+The first workflow contract run produced the required TDD red result against
+the legacy single-job workflow:
+
+```text
+workflow-contract: FAIL: top-level jobs must be exactly source-contract, build-test, and publish
+```
+
+The completed workflow now has exactly three jobs:
+
+- `source-contract` runs only offline source/workflow validation and has no
+  environment, secret, login, or push path;
+- `build-test` runs the exact `linux/amd64` and `linux/arm64` matrix, builds a
+  local image, and runs both runtime contracts without credentials or push;
+- `publish` is gated to a `push` on `refs/heads/main`, depends on both earlier
+  jobs, uses the protected `build-image` environment, and is serialized by
+  `openresty-release-main`.
+
+All action, QEMU, Buildx, BuildKit, and binfmt inputs use the reviewed immutable
+pins. Checkout does not persist credentials. The publish job derives
+`DOCKER_CONFIG` from `$RUNNER_TEMP` through `$GITHUB_ENV` before Docker setup
+and login, so registry credentials do not use the default runner config.
+
+Publication is verify-before-promote and remains unexecuted locally:
+
+1. verify the workflow SHA is still current `main` before any registry build;
+2. push each platform by digest with `--provenance=false --sbom=false`;
+3. read child metadata from `containerimage.digest` and run both contracts on
+   each immutable child;
+4. create a candidate only from those two child digests, read
+   `containerimage.descriptor.digest`, and require exactly the expected
+   `linux/amd64` and `linux/arm64` descriptors with no third descriptor;
+5. rerun both contracts through the immutable two-platform index;
+6. freeze the version to the `1.31.1.1` lock, fail closed on an unexpected
+   repository variable or release-tag collision/inspection error, and recheck
+   current `main` immediately before promotion;
+7. promote only the immutable index to `latest`, `1.31.1.1`, and the
+   content-addressed release tag, then verify every public tag with
+   `imagetools inspect --format '{{json .Manifest.Digest}}'`;
+8. write and retain release evidence for 90 days, including source hashes,
+   child/index/tag digests, contract results, resolved build inputs, artifact
+   digest reporting, and all approved residual risks.
+
+Two implementation-time Actions validity issues were caught by pinned local
+`actionlint` `v1.7.7` and corrected before commit: a root job cannot use an
+empty `needs: []`, and the `runner` context is unavailable in job-level `env`.
+Focused smoke probes also proved that:
+
+- the candidate-index step accepts exactly the expected two descriptors and
+  rejects an added `unknown/unknown` third descriptor;
+- an explicit missing release tag is accepted, while a registry transport
+  error fails closed and an existing different digest is rejected;
+- `release-evidence.json` is valid JSON with the expected digest and residual
+  risk structure.
+
+Fresh complete local Task 3 gate at reviewed code head `81db9de`:
+
+```text
+sh -n tests/*.sh: PASS
+tests/source-contract.sh: PASS
+tests/workflow-contract.sh: PASS
+actionlint v1.7.7 .github/workflows/docker-image.yml: PASS
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .: PASS
+  image id: sha256:60b4bb50ed4d11597d78e4b762c72776eec9b7a12ce1731b1b9a5d6848a8b390
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+  old worker-0/worker-1/privileged PIDs: 2,3,4
+  new worker-0/worker-1/privileged PIDs: 5,6,7
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+git diff --check: PASS
+git status --short: clean
+```
+
+Review order and result:
+
+```text
+specification review at 81db9de: PASS, blocking findings 0
+code-quality review at 81db9de: PASS, blocking findings 0
+```
+
+The quality review recorded three non-blocking follow-ups only:
+
+1. the focused workflow contract intentionally uses strict whole-file counts
+   and some substring assertions, so future harmless action/comment changes may
+   require synchronized exact-line refinements;
+2. release-tag absence currently accepts registry errors containing the generic
+   text `not found`; a future hardening can narrow this to explicit manifest
+   404/`manifest unknown` responses;
+3. the actual artifact digest is written to the workflow summary, while the
+   JSON records where that post-upload digest is reported; a companion
+   post-upload attestation can make it independently machine-auditable later.
+
+None blocks the reviewed Task 3 implementation. No workflow was pushed or run
+on GitHub, no amd64 CI evidence exists yet, and no Docker Hub child, candidate,
+index, or public tag was published. Those remain behind the later plan gates.
+Task 4 documentation work is the next plan task but was intentionally not
+started. Ngatex Phase 2A remains blocked on the eventual reviewed, published,
+and independently verified immutable multi-architecture digest.
 
 ## 2026-07-16 16:47 Task 2 completion and persistent migration update
 
