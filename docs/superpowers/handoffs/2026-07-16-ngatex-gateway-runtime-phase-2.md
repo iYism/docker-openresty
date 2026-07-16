@@ -1,8 +1,75 @@
 # Ngatex Gateway Runtime Phase 2 Handoff
 
 **Recorded:** 2026-07-16 15:15:54 +0800
-**Updated:** 2026-07-16 18:33:22 +0800
-**Status:** Task 4 documentation synchronization is complete and independently approved. Task 5 is next; no push or registry publication has occurred yet.
+**Updated:** 2026-07-16 19:41:07 +0800
+**Status:** Task 5 PR verification is in progress. PR #1 is open at corrected code head `9c06b41`; no merge or public registry tag promotion has occurred yet.
+
+## 2026-07-16 19:41 Task 5 PR gate and review correction
+
+The reviewed branch was pushed and PR #1 was opened:
+
+```text
+PR: https://github.com/iYism/docker-openresty/pull/1
+branch: codex/ngatex-phase2-events-base-resume-20260716
+base: main at 74c291a27664a1c27232d4020de7ba52e7c17cc0
+current local code head: 9c06b41
+```
+
+The first PR matrix exposed an HTTP 415 response from the existing
+`https://www.zlib.net/zlib-1.3.2.tar.gz` transport on the hosted amd64 runner.
+Commit `f3db85b` moved the same zlib 1.3.2 archive bytes to the official
+`madler/zlib` v1.3.2 GitHub release asset and added `dependencies/zlib.lock`.
+The locked SHA-256 remains
+`bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16`,
+and the Dockerfile now verifies it immediately before extraction. A clean local
+ARM64 rebuild and both runtime contracts passed after that transport-only
+provenance correction.
+
+GitHub's PR review then found a real P1 publication blocker: Buildx writes
+`imagetools create --metadata-file` output as a top-level
+`containerimage.descriptor` object containing a `digest` field. The workflow
+incorrectly treated `containerimage.descriptor.digest` as one flat JSON key.
+Commit `9c06b41` corrects the fail-closed jq selector to:
+
+```text
+.["containerimage.descriptor"].digest
+```
+
+The approved historical plan still contains the old flat-key jq example. It
+was intentionally not rewritten; this handoff is the durable correction. The
+workflow contract now requires the nested selector and explicitly rejects the
+old flat selector.
+
+TDD and verification evidence for the review correction:
+
+```text
+RED: workflow-contract: FAIL: publish expected 1 occurrence(s) of
+     '.["containerimage.descriptor"].digest', found 0
+sh -n tests/*.sh: PASS
+tests/source-contract.sh: PASS
+tests/events-archive-contract.sh /private/tmp/lua-resty-events-bc85295b.tar.gz: PASS
+tests/workflow-contract.sh: PASS
+tests/docs-contract.sh: PASS
+nested Buildx metadata fixture and old-selector negative probe: PASS
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+git diff --check: PASS
+```
+
+Review order and result:
+
+```text
+specification review: PASS, blocking 0, important 0, minor 1
+  minor: preserve the approved plan and record its corrected jq semantics here
+code-quality review after specification review: APPROVED, blocking 0, important 0, minor 0
+```
+
+The superseded replacement run `29494427023` had source-contract and amd64
+green while ARM64 was still running when the corrected head was prepared. It
+does not authorize a merge because it predates `9c06b41`. Push the corrected
+head, require a fresh source + amd64 + arm64 green matrix, resolve the P1 review
+thread with the correcting commit, and only then merge normally. Public tag
+promotion and Ngatex Phase 2A remain behind the immutable-image gate.
 
 ## 2026-07-16 18:33 Task 4 completion and review update
 
