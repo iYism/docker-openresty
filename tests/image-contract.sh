@@ -12,6 +12,7 @@ platform_slug=$(printf '%s' "${platform:-native}" | tr '/:' '--')
 EVIDENCE_LOG=${EVIDENCE_DIR}/events-${platform_slug}.log
 container=openresty-events-contract-$$
 container_id=
+container_created=0
 container_started=0
 old_worker_0=
 old_worker_1=
@@ -58,6 +59,7 @@ persist_evidence() {
 
 remove_container() {
     if docker rm -f "$container_id" >/dev/null 2>&1; then
+        container_created=0
         container_started=0
         return 0
     fi
@@ -73,6 +75,8 @@ cleanup() {
             printf 'image-contract: cleanup: unable to persist fixture evidence\n' >&2
             cleanup_failed=1
         fi
+    fi
+    if [ "$container_created" -eq 1 ]; then
         if ! remove_container; then
             printf 'image-contract: cleanup: unable to remove fixture container %s\n' \
                 "$container_id" >&2
@@ -190,12 +194,17 @@ docker_run --rm \
         test "$actual_license" = "$expected_license"
     ' || fail "final-image filesystem contract failed"
 
+run_status=0
 container_id=$(docker_run -d \
     --name "$container" \
     -p 127.0.0.1::8080 \
     -v "${FIXTURE}:/etc/nginx/nginx.conf:ro" \
     --entrypoint /usr/sbin/nginx \
-    "$IMAGE" -c /etc/nginx/nginx.conf) || fail "unable to start fixture container"
+    "$IMAGE" -c /etc/nginx/nginx.conf) || run_status=$?
+if [ -n "$container_id" ]; then
+    container_created=1
+fi
+[ "$run_status" -eq 0 ] || fail "unable to start fixture container"
 [ -n "$container_id" ] || fail "docker did not return a container id"
 container_started=1
 

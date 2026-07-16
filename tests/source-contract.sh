@@ -188,6 +188,18 @@ assert_not_contains 'docker inspect --format '\''{{.State.Pid}}'\'' "$container"
 assert_not_contains 'docker kill --signal HUP "$container"' "$IMAGE_CONTRACT"
 assert_not_contains 'docker rm -f "$container"' "$IMAGE_CONTRACT"
 
+assert_contains 'container_created=0' "$IMAGE_CONTRACT"
+assert_contains 'run_status=0' "$IMAGE_CONTRACT"
+assert_contains ') || run_status=$?' "$IMAGE_CONTRACT"
+assert_contains 'if [ -n "$container_id" ]; then' "$IMAGE_CONTRACT"
+assert_contains 'container_created=1' "$IMAGE_CONTRACT"
+assert_before 'container_id=$(docker_run -d \' \
+    'if [ -n "$container_id" ]; then' "$IMAGE_CONTRACT"
+assert_before 'container_created=1' \
+    '[ "$run_status" -eq 0 ] || fail "unable to start fixture container"' "$IMAGE_CONTRACT"
+assert_before '[ "$run_status" -eq 0 ] || fail "unable to start fixture container"' \
+    'container_started=1' "$IMAGE_CONTRACT"
+
 assert_contains 'for command in docker curl awk sed grep tr wc sleep mkdir mv rm; do' "$IMAGE_CONTRACT"
 assert_contains 'tmp_log=${EVIDENCE_LOG}.tmp.$$' "$IMAGE_CONTRACT"
 assert_contains 'mv -f "$tmp_log" "$EVIDENCE_LOG"' "$IMAGE_CONTRACT"
@@ -212,6 +224,7 @@ assert_block_contains cleanup "$cleanup_block" 'status=$?'
 assert_block_contains cleanup "$cleanup_block" 'cleanup_failed=0'
 assert_block_contains cleanup "$cleanup_block" 'if ! persist_evidence; then'
 assert_block_contains cleanup "$cleanup_block" 'image-contract: cleanup: unable to persist fixture evidence'
+assert_block_contains cleanup "$cleanup_block" 'if [ "$container_created" -eq 1 ]; then'
 assert_block_contains cleanup "$cleanup_block" 'if ! remove_container; then'
 assert_block_contains cleanup "$cleanup_block" 'image-contract: cleanup: unable to remove fixture container %s'
 assert_block_contains cleanup "$cleanup_block" 'if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then'
