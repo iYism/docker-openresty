@@ -29,6 +29,8 @@ ARG RESTY_EXPR_VER=1.3.2
 ARG RESTY_HTTP_VER=0.2.3
 ARG RESTY_IPMATCHER_VER=0.6.1
 ARG RESTY_RADIXTREE_VER=2.9.2
+ARG RESTY_EVENTS_VER=0.3.1
+ARG RESTY_EVENTS_SHA256=fd5f15415e874de31d25a0bd14dd751e252166ddce8eefea5e4aa77ac9a5b104
 
 # Define arguments for OpenResty user, directories, and build path
 ARG USER=openresty
@@ -66,6 +68,8 @@ ARG OPENRESTY_VER \
     RESTY_HTTP_VER \
     RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER \
+    RESTY_EVENTS_VER \
+    RESTY_EVENTS_SHA256 \
     USER \
     CONF_DIR \
     HOME_DIR \
@@ -74,59 +78,44 @@ ARG OPENRESTY_VER \
     LUA_LIB \
     BUILD_DIR
 
-COPY dependencies/openresty.lock \
-     dependencies/zlib.lock \
-     dependencies/lua-resty-events.lock \
-     dependencies/lua-resty-events.files.sha256 \
-     ${BUILD_DIR}/locks/
-
 USER root
 WORKDIR ${BUILD_DIR}
 
-RUN set -eux \
-    && . ${BUILD_DIR}/locks/openresty.lock \
-    && . ${BUILD_DIR}/locks/zlib.lock \
-    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
-    && test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}" \
-    && test "${ZLIB_VER}" = "${ZLIB_VERSION}" \
-    && mkdir -p ${BUILD_DIR}/pkg ${BUILD_DIR}/src \
+RUN set -x \
+    && download() { curl -fL --retry 5 --retry-all-errors --connect-timeout 20 "$@"; } \
+    && mkdir -p {pkg,src} \
     && cd ${BUILD_DIR}/pkg \
 # Download openresty
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
-        -o openresty-${OPENRESTY_VER}.tar.gz "${OPENRESTY_ARCHIVE}" \
-    && echo "${OPENRESTY_SHA256}  openresty-${OPENRESTY_VER}.tar.gz" | sha256sum -c - \
+    && download -o openresty-${OPENRESTY_VER}.tar.gz https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz \
 # Download zlib
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
-        -o zlib-${ZLIB_VER}.tar.gz "${ZLIB_ARCHIVE}" \
-    && echo "${ZLIB_SHA256}  zlib-${ZLIB_VER}.tar.gz" | sha256sum -c - \
+    && download -o zlib-${ZLIB_VER}.tar.gz https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib-${ZLIB_VER}.tar.gz \
 # Download pcre2
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
+    && download -o pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
+    && download -o openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
 # Download openssl sess_set_get_cb_yield.patch (version pinned via OPENSSL_PATCH_VER)
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
+    && download -o openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
 # Download GeoIP
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
+    && download -o GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
 # Download libmaxminddb
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
+    && download -o libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
 # Download brotli
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
+    && download -o brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
 # Download ngx_brotli
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
+    && download -o ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
 # Download ngx_http_geoip2_module
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
+    && download -o ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
 # Download lua-resty-expr
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
+    && download -o lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
 # Download lua-resty-http
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
+    && download -o lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
 # Download lua-resty-ipmatcher
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
+    && download -o lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
+    && download -o lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
 # Download lua-resty-events
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
-        -o lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz "${RESTY_EVENTS_ARCHIVE}" \
-    && echo "${RESTY_EVENTS_SHA256}  lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz" | sha256sum -c -
+    && download -o lua-resty-events-${RESTY_EVENTS_VER}.tar.gz https://github.com/Kong/lua-resty-events/archive/refs/tags/${RESTY_EVENTS_VER}.tar.gz \
+    && echo "${RESTY_EVENTS_SHA256}  lua-resty-events-${RESTY_EVENTS_VER}.tar.gz" | sha256sum -c -
 
 
 ### Build Stage
@@ -187,13 +176,12 @@ RUN set -x \
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
 
-# Unpack and verify lua-resty-events
+ARG RESTY_EVENTS_VER
+
+# Unpack lua-resty-events
 RUN set -x \
-    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && cd ${BUILD_DIR}/src \
-    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz \
-    && cd lua-resty-events-${RESTY_EVENTS_COMMIT} \
-    && sha256sum -c ${BUILD_DIR}/locks/lua-resty-events.files.sha256
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-events-${RESTY_EVENTS_VER}.tar.gz
 
 # Install zlib
 RUN set -x \
@@ -264,7 +252,7 @@ RUN set -x \
       -Wl,-rpath,${HOME_DIR}/zlib/lib:${HOME_DIR}/openssl3/lib \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && rm -rf "${BUILD_DIR}/src/openssl-${OPENSSL_VER}"
+    && rm -rf ${BUILD_DIR}/src/openssl-${OPENSSL_VER}
 
 # Install GeoIP
 RUN set -x \
@@ -314,7 +302,6 @@ RUN set -x \
 
 # Install openresty
 RUN set -x \
-    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/openresty-${OPENRESTY_VER}.tar.gz \
     && cd openresty-${OPENRESTY_VER} \
@@ -385,7 +372,7 @@ RUN set -x \
         --with-pcre-jit \
         --add-module=${BUILD_DIR}/src/ngx_http_geoip2_module-${NGX_GEOIP2_VER} \
         --add-module=${BUILD_DIR}/src/ngx_brotli-${NGX_BROTLI_VER} \
-        --add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
+        --add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_VER} \
         --with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT' \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install
@@ -421,13 +408,9 @@ RUN set -x \
     && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB}
 
 # Install lua-resty-events
-RUN set -eux \
-    && . ${BUILD_DIR}/locks/lua-resty-events.lock \
-    && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
-    && install -d ${HOME_DIR}/licenses/lua-resty-events \
-    && cd "${src}" \
-    && make install LUA_LIB_DIR="${LUA_LIB}" \
-    && install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"
+RUN set -x \
+    && cd ${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_VER} \
+    && make install LUA_LIB_DIR=${LUA_LIB}
 
 
 ### Runtime Stage

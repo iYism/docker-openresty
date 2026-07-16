@@ -37,17 +37,15 @@ docker buildx build --platform linux/amd64,linux/arm64 -t openresty:local .
 ## Version Management
 
 Component versions are defined as ARGs at the top of the Dockerfile:
-- `OPENRESTY_VER` - OpenResty `1.31.1.1`
-- `ZLIB_VER`, `PCRE2_VER`, `OPENSSL_VER` - Core library versions; OpenSSL is `3.5.6`
+- `OPENRESTY_VER` - OpenResty version
+- `ZLIB_VER`, `PCRE2_VER`, `OPENSSL_VER` - Core library versions
 - `NGX_BROTLI_VER`, `NGX_GEOIP2_VER` - nginx module versions
 - `RESTY_EXPR_VER`, `RESTY_IPMATCHER_VER`, `RESTY_RADIXTREE_VER` - Lua library versions
-
-`lua-resty-events` `0.3.1` is installed with the statically linked CORE module `ngx_lua_events_module`.
 
 Proxy settings can be passed via build args:
 - `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` - For restricted network environments
 
-The release workflow freezes its public version to `dependencies/openresty.lock`. If the repository variable `OPENRESTY_VERSION` is configured, it must be empty or exactly match the reviewed lock; it is never used to select a newer version.
+When updating versions, also update `OPENRESTY_VERSION` variable in GitHub Actions workflow (`.github/workflows/docker-image.yml`) for proper image tagging.
 
 ## Architecture
 
@@ -63,32 +61,14 @@ Key build dependencies are compiled to `/opt/openresty/` subdirectories (zlib, p
 
 - **ngx_brotli** - Brotli compression
 - **ngx_http_geoip2_module** - MaxMind GeoIP2 lookup
-- **ngx_lua_events_module** - Statically linked CORE module for `lua-resty-events` `0.3.1`
 - **lua-resty-expr** - Lua expression evaluator
+- **lua-resty-http** - HTTP client for OpenResty
 - **lua-resty-ipmatcher** - IP matching library
 - **lua-resty-radixtree** - Radix tree router
 
-`resty.http` is absent from this base image. The legacy `RESTY_HTTP_VER` source-build input does not make it available in the final Lua inventory.
-
-## Verification and Consumption
-
-The `latest` and version tags are convenience selectors; production consumers resolve and pin the tested immutable digest.
-
-Immutable references start with `sungyism/openresty:1.31.1.1@sha256:` and the digest must come from verified release evidence.
-
-### Local ARM64 verification gate
-
-```bash
-tests/source-contract.sh
-tests/workflow-contract.sh
-docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
-tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
-tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
-```
-
 ## Runtime Configuration
 
-- The `openresty` UID 101 account exists, but the final runtime stage has no `USER` instruction, so the default container process runs as root.
+- User: `openresty` (UID 101)
 - Config directory: `/etc/nginx`
 - Logs: `/var/log/nginx`
 - Data: `/var/lib/nginx`
