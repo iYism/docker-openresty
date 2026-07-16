@@ -24,7 +24,7 @@ A high-performance, source-compiled OpenResty Docker image built on Enterprise L
 - **Modern TLS** - OpenSSL 3.x with OpenResty-specific patches for yield support
 - **Brotli compression** - Native support for Brotli encoding
 - **GeoIP2** - MaxMind GeoIP2 integration for geolocation
-- **Enhanced Lua** - Additional Lua libraries for routing, IP matching, and expression evaluation
+- **Enhanced Lua** - Additional Lua libraries for routing, IP matching, expression evaluation, and cross-worker events
 
 ## Quick Start
 
@@ -149,8 +149,8 @@ docker buildx build \
 | `HTTP_PROXY` | *(none)* | HTTP proxy for network requests |
 | `HTTPS_PROXY` | *(none)* | HTTPS proxy for network requests |
 | `NO_PROXY` | *(none)* | Hosts to bypass proxy |
-| `OPENRESTY_VER` | `1.29.2.5` | OpenResty version |
-| `OPENSSL_VER` | `3.5.5` | OpenSSL version |
+| `OPENRESTY_VER` | `1.31.1.1` | OpenResty version |
+| `OPENSSL_VER` | `3.5.6` | OpenSSL version |
 | `ZLIB_VER` | `1.3.2` | zlib compression library version |
 | `PCRE2_VER` | `10.47` | PCRE2 regex library version |
 | `GEOIP_VER` | `1.6.12` | Legacy GeoIP library version |
@@ -159,7 +159,7 @@ docker buildx build \
 | `NGX_BROTLI_VER` | `master` | nginx Brotli module version |
 | `NGX_GEOIP2_VER` | `3.4` | nginx GeoIP2 module version |
 | `RESTY_EXPR_VER` | `1.3.2` | lua-resty-expr version |
-| `RESTY_HTTP_VER` | `0.2.3` | lua-resty-http version |
+| `RESTY_HTTP_VER` | `0.2.3` | Legacy source-build input; it does not make `resty.http` available in the runtime image |
 | `RESTY_IPMATCHER_VER` | `0.6.1` | lua-resty-ipmatcher version |
 | `RESTY_RADIXTREE_VER` | `2.9.2` | lua-resty-radixtree version |
 
@@ -188,15 +188,32 @@ docker buildx build \
 | **ngx_http_image_filter_module** | Image transformation |
 | **ngx_http_xslt_module** | XSLT transformations |
 | **ngx_stream_module** | TCP/UDP proxying |
+| **ngx_lua_events_module** | Statically linked CORE module for cross-worker and privileged-agent events |
 
 ### Lua Libraries
 
 | Library | Description |
 |---------|-------------|
 | **lua-resty-expr** | Expression evaluator for complex rule matching |
-| **lua-resty-http** | HTTP client library for OpenResty |
+| **lua-resty-events 0.3.1** | Event broker and Lua API matching the statically linked CORE module |
 | **lua-resty-ipmatcher** | High-performance IP/CIDR matching |
 | **lua-resty-radixtree** | Radix tree implementation for efficient routing |
+
+`lua-resty-events` `0.3.1` is installed with the statically linked CORE module `ngx_lua_events_module`.
+
+`resty.http` is absent from this base image. The legacy `RESTY_HTTP_VER` download/build input remains for compatibility with the existing recipe, but consumers that need an HTTP client must install their separately reviewed dependency.
+
+### Local ARM64 verification gate
+
+Run the complete native verification gate whenever the Dockerfile, dependency locks, contracts, or release documentation changes:
+
+```bash
+tests/source-contract.sh
+tests/workflow-contract.sh
+docker build --platform linux/arm64 -t sungyism/openresty:events-contract .
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64
+```
 
 ## Directory Structure
 
@@ -241,12 +258,16 @@ mkdir -p /var/lib/nginx/lua_cache
 
 Images are available on Docker Hub:
 
-- `sungyism/openresty:latest` - Latest stable build
-- `sungyism/openresty:1.29.2.5` - Version-specific tag
+- `sungyism/openresty:latest` - Convenience selector for the latest accepted build
+- `sungyism/openresty:1.31.1.1` - Convenience selector for the accepted OpenResty version
+
+The `latest` and version tags are convenience selectors; production consumers resolve and pin the tested immutable digest.
+
+Immutable references start with `sungyism/openresty:1.31.1.1@sha256:` and the digest must come from verified release evidence.
 
 ## Security Considerations
 
-- Runs as non-root user `openresty` (UID 101) by default
+- The `openresty` UID 101 account exists, but the final runtime stage has no `USER` instruction, so the default container process runs as root.
 - Minimal runtime image reduces attack surface
 - Compiled with security-hardened flags
 - OpenSSL built with FIPS support enabled
