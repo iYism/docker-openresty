@@ -126,8 +126,10 @@ assert_contains '--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_C
 assert_not_contains '--add-dynamic-module=${BUILD_DIR}/src/lua-resty-events-' "$DOCKERFILE"
 assert_contains '# Install lua-resty-events' "$DOCKERFILE"
 assert_contains 'RUN set -eux \' "$DOCKERFILE"
-assert_contains 'for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do \' "$DOCKERFILE"
-assert_contains 'install -m 0644 "${src}/lualib/resty/events/${file}" "${LUA_LIB}/resty/events/${file}"; \' "$DOCKERFILE"
+assert_not_contains 'for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua' "$DOCKERFILE"
+for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do
+    assert_contains "install -m 0644 \"\${src}/lualib/resty/events/${file}\" \"\${LUA_LIB}/resty/events/${file}\" \\" "$DOCKERFILE"
+done
 assert_contains 'install -m 0644 "${src}/lualib/resty/events/compat/init.lua" "${LUA_LIB}/resty/events/compat/init.lua" \' "$DOCKERFILE"
 assert_contains 'install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"' "$DOCKERFILE"
 assert_not_contains 'resty/events/*.lua' "$DOCKERFILE"

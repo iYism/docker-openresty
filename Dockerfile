@@ -82,7 +82,7 @@ COPY dependencies/openresty.lock \
 USER root
 WORKDIR ${BUILD_DIR}
 
-RUN set -x \
+RUN set -eux \
     && . ${BUILD_DIR}/locks/openresty.lock \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}" \
@@ -419,9 +419,16 @@ RUN set -eux \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
     && install -d ${LUA_LIB}/resty/events/compat ${HOME_DIR}/licenses/lua-resty-events \
-    && for file in broker.lua callback.lua codec.lua disable_listening.lua frame.lua init.lua protocol.lua queue.lua utils.lua worker.lua; do \
-         install -m 0644 "${src}/lualib/resty/events/${file}" "${LUA_LIB}/resty/events/${file}"; \
-       done \
+    && install -m 0644 "${src}/lualib/resty/events/broker.lua" "${LUA_LIB}/resty/events/broker.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/callback.lua" "${LUA_LIB}/resty/events/callback.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/codec.lua" "${LUA_LIB}/resty/events/codec.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/disable_listening.lua" "${LUA_LIB}/resty/events/disable_listening.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/frame.lua" "${LUA_LIB}/resty/events/frame.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/init.lua" "${LUA_LIB}/resty/events/init.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/protocol.lua" "${LUA_LIB}/resty/events/protocol.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/queue.lua" "${LUA_LIB}/resty/events/queue.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/utils.lua" "${LUA_LIB}/resty/events/utils.lua" \
+    && install -m 0644 "${src}/lualib/resty/events/worker.lua" "${LUA_LIB}/resty/events/worker.lua" \
     && install -m 0644 "${src}/lualib/resty/events/compat/init.lua" "${LUA_LIB}/resty/events/compat/init.lua" \
     && install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"
 
