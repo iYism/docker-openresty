@@ -167,6 +167,24 @@ assert_not_contains 'docker inspect --format '\''{{.State.Pid}}'\'' "$container"
 assert_not_contains 'docker kill --signal HUP "$container"' "$IMAGE_CONTRACT"
 assert_not_contains 'docker rm -f "$container"' "$IMAGE_CONTRACT"
 
+assert_contains 'for command in docker curl awk sed grep tr wc sleep mkdir mv rm; do' "$IMAGE_CONTRACT"
+assert_contains 'tmp_log=${EVIDENCE_LOG}.tmp.$$' "$IMAGE_CONTRACT"
+assert_contains 'mv -f "$tmp_log" "$EVIDENCE_LOG"' "$IMAGE_CONTRACT"
+assert_contains 'persist_evidence || fail "unable to persist fixture evidence"' "$IMAGE_CONTRACT"
+assert_contains 'remove_container || fail "unable to remove fixture container"' "$IMAGE_CONTRACT"
+assert_before 'persist_evidence || fail "unable to persist fixture evidence"' \
+    "printf 'image-contract: PASS" "$IMAGE_CONTRACT"
+assert_before 'remove_container || fail "unable to remove fixture container"' \
+    "printf 'image-contract: PASS" "$IMAGE_CONTRACT"
+assert_not_contains 'docker logs "$container_id" 2>&1 || true' "$IMAGE_CONTRACT"
+assert_not_contains 'docker rm -f "$container_id" >/dev/null 2>&1 || true' "$IMAGE_CONTRACT"
+
+assert_contains 'if state=$(pid_process_state "$pid" 2>/dev/null); then' "$IMAGE_CONTRACT"
+assert_contains 'printf "alive\n"' "$IMAGE_CONTRACT"
+assert_contains 'printf "gone\n"' "$IMAGE_CONTRACT"
+assert_contains 'running=$(docker inspect --format '\''{{.State.Running}}'\'' "$container_id" 2>/dev/null || true)' "$IMAGE_CONTRACT"
+assert_not_contains 'if ! docker exec "$container_id" /bin/sh -c "kill -0 ${pid}"' "$IMAGE_CONTRACT"
+
 download_count=$(grep -c '&& curl ' "$DOCKERFILE")
 [ "$download_count" -eq 15 ] || fail "expected 15 source downloads, found ${download_count}"
 if grep '&& curl ' "$DOCKERFILE" \

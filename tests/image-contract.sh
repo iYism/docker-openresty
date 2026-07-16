@@ -33,19 +33,54 @@ docker_run() {
     fi
 }
 
+persist_evidence() {
+    tmp_log=${EVIDENCE_LOG}.tmp.$$
+
+    mkdir -p "$EVIDENCE_DIR" || return 1
+    if ! docker logs "$container_id" >"$tmp_log" 2>&1; then
+        rm -f "$tmp_log"
+        return 1
+    fi
+    if ! {
+        printf '\nevents-contract summary old_worker_0=%s old_worker_1=%s old_privileged=%s\n' \
+            "$old_worker_0" "$old_worker_1" "$old_privileged"
+        printf 'events-contract summary new_worker_0=%s new_worker_1=%s new_privileged=%s\n' \
+            "$new_worker_0" "$new_worker_1" "$new_privileged"
+    } >>"$tmp_log"; then
+        rm -f "$tmp_log"
+        return 1
+    fi
+    if ! mv -f "$tmp_log" "$EVIDENCE_LOG"; then
+        rm -f "$tmp_log"
+        return 1
+    fi
+}
+
+remove_container() {
+    if docker rm -f "$container_id" >/dev/null 2>&1; then
+        container_started=0
+        return 0
+    fi
+    return 1
+}
+
 cleanup() {
     status=$?
-    trap - EXIT
-    mkdir -p "$EVIDENCE_DIR"
+    cleanup_failed=0
+    trap - EXIT HUP INT TERM
     if [ "$container_started" -eq 1 ]; then
-        {
-            docker logs "$container_id" 2>&1 || true
-            printf '\nevents-contract summary old_worker_0=%s old_worker_1=%s old_privileged=%s\n' \
-                "$old_worker_0" "$old_worker_1" "$old_privileged"
-            printf 'events-contract summary new_worker_0=%s new_worker_1=%s new_privileged=%s\n' \
-                "$new_worker_0" "$new_worker_1" "$new_privileged"
-        } >"$EVIDENCE_LOG"
-        docker rm -f "$container_id" >/dev/null 2>&1 || true
+        if ! persist_evidence; then
+            printf 'image-contract: cleanup: unable to persist fixture evidence\n' >&2
+            cleanup_failed=1
+        fi
+        if ! remove_container; then
+            printf 'image-contract: cleanup: unable to remove fixture container %s\n' \
+                "$container_id" >&2
+            cleanup_failed=1
+        fi
+    fi
+    if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then
+        status=1
     fi
     exit "$status"
 }
@@ -63,7 +98,7 @@ trap 'interrupted TERM' TERM
 [ -f "$FIXTURE" ] || fail "missing fixture: $FIXTURE"
 [ -f "$EVENTS_FILES" ] || fail "missing reviewed events inventory: $EVENTS_FILES"
 
-for command in docker curl awk sed grep tr; do
+for command in docker curl awk sed grep tr wc sleep mkdir mv rm; do
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
 
@@ -286,13 +321,32 @@ wait_pid_gone() {
     pid=$1
     attempt=0
     while [ "$attempt" -lt 200 ]; do
-        if ! docker exec "$container_id" /bin/sh -c "kill -0 ${pid}" >/dev/null 2>&1; then
-            return 0
+        if state=$(pid_process_state "$pid" 2>/dev/null); then
+            case "$state" in
+                gone) return 0 ;;
+                alive) ;;
+                *) fail "unexpected process state for old PID ${pid}: ${state}" ;;
+            esac
+        else
+            running=$(docker inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null || true)
+            [ "$running" != false ] \
+                || fail "fixture container stopped while waiting for old PID ${pid}"
         fi
         attempt=$((attempt + 1))
         sleep 0.1
     done
-    fail "old process still alive after HUP: ${pid}"
+    fail "unable to prove old process exited after HUP: ${pid}"
+}
+
+pid_process_state() {
+    pid=$1
+    docker exec "$container_id" /bin/sh -c '
+        if kill -0 "$1" 2>/dev/null; then
+            printf "alive\n"
+        else
+            printf "gone\n"
+        fi
+    ' sh "$pid"
 }
 
 wait_broker_pid() {
@@ -356,6 +410,8 @@ if printf '%s\n' "$logs" | grep -E '\[(emerg|alert|crit)\]|events-contract (publ
     fail "fixture logs contain a fatal contract error"
 fi
 
+persist_evidence || fail "unable to persist fixture evidence"
+remove_container || fail "unable to remove fixture container"
 printf 'image-contract: PASS image=%s platform=%s old=%s,%s,%s new=%s,%s,%s evidence=%s\n' \
     "$IMAGE" "${platform:-native}" \
     "$old_worker_0" "$old_worker_1" "$old_privileged" \
