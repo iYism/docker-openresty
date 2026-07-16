@@ -431,6 +431,16 @@ Do not push yet.
 - Create: `tests/workflow-contract.sh`
 - Modify: `.github/workflows/docker-image.yml`
 
+**Approved correction checkpoint:**
+
+- `docker buildx build --metadata-file` is read from `containerimage.digest`;
+- `docker buildx imagetools create --metadata-file` is read from `containerimage.descriptor.digest`;
+- every push-by-digest child build disables attestations with `--provenance=false --sbom=false`;
+- checkout, login, and artifact upload use the reviewed Node 24 action pins listed below;
+- the candidate index must contain exactly two descriptors: the tested `linux/amd64` child and the tested `linux/arm64` child, with no third descriptor;
+- public tag verification reads each top-level digest with `imagetools inspect --format '{{json .Manifest.Digest}}'`;
+- the workflow contract stays POSIX shell plus `awk`, `sed`, and `grep`; it must not depend on `yq`.
+
 - [ ] **Step 1: Write a focused failing workflow contract**
 
 Create executable `tests/workflow-contract.sh`. Keep it dependency-free: POSIX shell plus `awk`, `sed`, and `grep` only. Extract each top-level job by its two-space YAML indentation so assertions cannot be satisfied by a different job:
@@ -453,11 +463,11 @@ Assert all of these exact properties:
 - `source-contract` has no environment, registry secret, login, or push;
 - `build-test` has `needs: source-contract`, exactly the amd64/arm64 matrix, and no environment, registry secret, login, or push;
 - `publish` has `needs: [source-contract, build-test]`, `environment: build-image`, and a push-to-main-only condition;
-- checkout is pinned to `11bd71901bbe5b1630ceea73d27597364c9af683` with `persist-credentials: false`;
+- checkout is pinned to `de0fac2e4500dabe0009e67214ff5f5447ce83dd` (`actions/checkout` v6.0.2) with `persist-credentials: false`;
 - QEMU is pinned to action `06116385d9baf250c9f4dcb4858b16962ea869c3`, image `docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0`, and platform `arm64`;
 - Buildx is pinned to action `d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5`, Buildx `v0.35.0`, and BuildKit `moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a`;
-- login is pinned to `74a5d142397b4f367a81961eba4e8cd7edddf772` and exists only in `publish`;
-- artifact upload is pinned to `ea165f8d65b6e75b540449e92b4886f43607fa02`;
+- login is pinned to `4907a6ddec9925e35a0a9e82d7399ccc52663121` (`docker/login-action` v4.1.0) and exists only in `publish`;
+- artifact upload is pinned to `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (`actions/upload-artifact` v7.0.1);
 - every build/test command precedes the promotion command inside `publish`;
 - run-id/run-attempt names, digest-only child references, main-tip verification, release-tag collision check, and all-three-tag digest verification are present.
 
@@ -538,6 +548,8 @@ for item in linux/amd64:amd64 linux/arm64:arm64; do
   docker buildx build \
     --platform "$platform" \
     --output "type=image,name=${repo},push-by-digest=true,name-canonical=true,push=true" \
+    --provenance=false \
+    --sbom=false \
     --metadata-file "$metadata" \
     .
   digest=$(jq -er '.["containerimage.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' "$metadata")
@@ -558,12 +570,12 @@ docker buildx imagetools create \
   --tag "$candidate" \
   "${repo}@${amd64}" \
   "${repo}@${arm64}"
-index_digest=$(jq -er '.["containerimage.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/index-metadata.json")
+index_digest=$(jq -er '.["containerimage.descriptor.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/index-metadata.json")
 immutable_index="${repo}@${index_digest}"
 docker buildx imagetools inspect "$immutable_index" --raw > "$RUNNER_TEMP/index.json"
 ```
 
-Require the raw index to contain exactly the two expected `platform=digest` pairs, then re-run both image contracts against `immutable_index` before promotion.
+Require the raw index to contain exactly two descriptors and exactly the expected `linux/amd64=digest` and `linux/arm64=digest` pairs, with no third descriptor, then re-run both image contracts against `immutable_index` before promotion.
 
 Freeze the public version to the lock. If repository variable `OPENRESTY_VERSION` is nonempty and not `1.31.1.1`, fail; never choose the larger value. Define the permanent release tag from the digest prefix:
 
@@ -584,7 +596,7 @@ docker buildx imagetools create \
   "$immutable_index"
 ```
 
-Reinspect `latest`, `1.31.1.1`, and the release tag and require all three digests to equal `index_digest`.
+Reinspect `latest`, `1.31.1.1`, and the release tag with `docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}'` and require all three digests to equal `index_digest`.
 
 Write `release-evidence.json` with source commit, run id/attempt, workflow URL, source hashes, baseline digest, top-level digest, both child digests, tag mappings, contract results, resolved QEMU/Buildx/BuildKit inputs, and the enumerated residual risks. Upload the JSON, raw index, metadata, inventory diffs, and both architecture logs for 90 days with the pinned artifact action. Append the immutable reference and both child digests to `$GITHUB_STEP_SUMMARY`.
 
