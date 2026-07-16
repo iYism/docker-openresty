@@ -1,7 +1,79 @@
 # Ngatex Gateway Runtime Phase 2 Handoff
 
 **Recorded:** 2026-07-16 15:15:54 +0800  
-**Status:** Active and incomplete. Resume at Task 2 review fixes; do not restart the work.
+**Status:** Paused by the user and incomplete. Resume at Task 2 verification and review; do not restart the work.
+
+## 2026-07-16 15:53 pause update
+
+The user explicitly paused development before restarting Codex with
+`--dangerously-bypass-approvals-and-sandbox`. No Task 3 work has started.
+
+The work was not lost. The original isolated worktree described below remains
+at commit `691e139`. Because the restricted patch tool could not edit that
+`/private/tmp` path, continuation was made in a second docker-openresty worktree:
+
+```text
+/Users/jiangmeng/GitProjects/ngatex/.worktrees/docker-openresty-phase2-events-resume
+branch: codex/ngatex-phase2-events-base-resume-20260716
+code head before this handoff update: dd060be0268457db5319dda0eb5e6df59e9c2906
+```
+
+That path is Git-ignored by Ngatex and belongs to the isolated docker-openresty
+clone; its commits are not Ngatex commits. Commit `dd060be` changes only:
+
+- `tests/source-contract.sh`
+- `tests/image-contract.sh`
+- `tests/inventory-contract.sh`
+
+It fixes the three Task 2 review blockers by:
+
+1. recording the pre-HUP log boundary, waiting for the post-boundary master
+   `signal 1 (SIGHUP) received, reconfiguring` marker, and accepting replacement
+   receiver initialization only after that marker;
+2. using the immutable `container_id` for every post-start Docker operation and
+   cleanup, while retaining the reusable name only for `docker run --name`;
+3. requiring an exact OpenResty version line, exact OpenSSL version token, and
+   exact configure tokens in both image and inventory contracts.
+
+Fresh TDD and static evidence for `dd060be`:
+
+```text
+RED: source-contract: FAIL: missing: grep -F -x -c -- 'nginx version: openresty/1.31.1.1'
+GREEN: sh -n tests/*.sh
+GREEN: tests/source-contract.sh
+GREEN: tests/events-archive-contract.sh /private/tmp/lua-resty-events-bc85295b.tar.gz
+GREEN: negative probes reject 1.31.1.10, OpenSSL 3.5.60, and configure-token suffixes
+GREEN: git diff --check
+```
+
+A direct Docker smoke command succeeded and returned `aarch64`, OpenResty
+`1.31.1.1`, and OpenSSL `3.5.6`. The restricted runner nevertheless denied
+Docker socket access when Docker was invoked from inside `tests/image-contract.sh`.
+Therefore the complete post-fix image and inventory contracts were **not**
+rerun and must not be reported as fresh passes. Earlier ARM64 evidence remains
+historical evidence only.
+
+Three implementation subagents and one specification-review subagent stalled
+without changing files and were interrupted. Task 2 is not complete until the
+full ARM64 image/inventory gate passes on `dd060be`, followed by specification
+compliance review and then code-quality review.
+
+Resume exactly here:
+
+```sh
+cd /Users/jiangmeng/GitProjects/ngatex/.worktrees/docker-openresty-phase2-events-resume
+cat AGENTS.md
+cat docs/superpowers/handoffs/2026-07-16-ngatex-gateway-runtime-phase-2.md
+git status --short
+git log --oneline -14
+```
+
+Then run the complete Task 2 gate, perform the two reviews in order, and fix and
+re-review every blocking finding. Only after Task 2 approval proceed to Task 3.
+Before Task 3 implementation, preserve the CI corrections already recorded in
+this handoff: the imagetools metadata key, `--provenance=false --sbom=false`,
+Node 24 action pins, exactly two platform descriptors, and exact final-tag
+digest verification. No push, PR, merge, or Docker Hub publication has occurred.
 
 ## User authorization and constraints
 
