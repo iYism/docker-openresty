@@ -25,10 +25,17 @@ ARG LIBMAXMINDDB_VER=1.13.3
 ARG BROTLI_VER=1.2.0
 ARG NGX_BROTLI_VER=master
 ARG NGX_GEOIP2_VER=3.4
+ARG JSONSCHEMA_VER=0.9.13
+ARG NETURL_VER=1.2-1
 ARG RESTY_EXPR_VER=1.3.2
-ARG RESTY_HTTP_VER=0.2.3
+ARG RESTY_HTTP_VER=0.18.1
+ARG RESTY_HEALTHCHECK_VER=3.1.2
 ARG RESTY_IPMATCHER_VER=0.6.1
 ARG RESTY_RADIXTREE_VER=2.9.2
+ARG RESTY_EVENTS_VER=0.3.1
+ARG RESTY_TIMER_VER=1.1.0
+ARG RESTY_CTXDUMP_VER=0.1
+ARG RESTY_BALANCER_VER=0.05
 
 # Define arguments for OpenResty user, directories, and build path
 ARG USER=openresty
@@ -62,10 +69,17 @@ ARG OPENRESTY_VER \
     BROTLI_VER \
     NGX_BROTLI_VER \
     NGX_GEOIP2_VER \
+    JSONSCHEMA_VER \
+    NETURL_VER \
     RESTY_EXPR_VER \
     RESTY_HTTP_VER \
+    RESTY_HEALTHCHECK_VER \
     RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER \
+    RESTY_EVENTS_VER \
+    RESTY_TIMER_VER \
+    RESTY_CTXDUMP_VER \
+    RESTY_BALANCER_VER \
     USER \
     CONF_DIR \
     HOME_DIR \
@@ -100,14 +114,28 @@ RUN set -x \
     && curl -Lo ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
 # Download ngx_http_geoip2_module
     && curl -Lo ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
+# Download jsonschema
+    && curl -Lo jsonschema-${JSONSCHEMA_VER}.tar.gz https://github.com/api7/jsonschema/archive/refs/tags/v${JSONSCHEMA_VER}.tar.gz \
+# Download neturl
+    && curl -Lo neturl-${NETURL_VER}.tar.gz https://github.com/golgote/neturl/archive/refs/tags/v${NETURL_VER}.tar.gz \
 # Download lua-resty-expr
     && curl -Lo lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
 # Download lua-resty-http
-    && curl -Lo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/api7/lua-resty-http/archive/refs/tags/v${RESTY_HTTP_VER}.tar.gz \
+    && curl -Lo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/Kong/lua-resty-http/archive/refs/tags/${RESTY_HTTP_VER}.tar.gz \
+# Download lua-resty-healthcheck
+    && curl -Lo lua-resty-healthcheck-${RESTY_HEALTHCHECK_VER}.tar.gz https://github.com/Kong/lua-resty-healthcheck/archive/refs/tags/${RESTY_HEALTHCHECK_VER}.tar.gz \
 # Download lua-resty-ipmatcher
     && curl -Lo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
-    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz
+    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
+# Download lua-resty-events
+    && curl -Lo lua-resty-events-${RESTY_EVENTS_VER}.tar.gz https://github.com/Kong/lua-resty-events/archive/refs/tags/${RESTY_EVENTS_VER}.tar.gz \
+# Download lua-resty-timer
+    && curl -Lo lua-resty-timer-${RESTY_TIMER_VER}.tar.gz https://github.com/Kong/lua-resty-timer/archive/refs/tags/${RESTY_TIMER_VER}.tar.gz \
+# Download lua-resty-ctxdump
+    && curl -Lo lua-resty-ctxdump-${RESTY_CTXDUMP_VER}.tar.gz https://github.com/tokers/lua-resty-ctxdump/archive/refs/tags/v${RESTY_CTXDUMP_VER}.tar.gz \
+# Download lua-resty-balancer
+    && curl -Lo lua-resty-balancer-${RESTY_BALANCER_VER}.tar.gz https://github.com/openresty/lua-resty-balancer/archive/refs/tags/v${RESTY_BALANCER_VER}.tar.gz
 
 
 ### Build Stage
@@ -123,10 +151,17 @@ ARG OPENRESTY_VER \
     BROTLI_VER \
     NGX_BROTLI_VER \
     NGX_GEOIP2_VER \
+    JSONSCHEMA_VER \
+    NETURL_VER \
     RESTY_EXPR_VER \
     RESTY_HTTP_VER \
+    RESTY_HEALTHCHECK_VER \
     RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER \
+    RESTY_EVENTS_VER \
+    RESTY_TIMER_VER \
+    RESTY_CTXDUMP_VER \
+    RESTY_BALANCER_VER \
     USER \
     CONF_DIR \
     HOME_DIR \
@@ -145,10 +180,17 @@ ENV OPENRESTY_VER=$OPENRESTY_VER \
     BROTLI_VER=$BROTLI_VER \
     NGX_BROTLI_VER=$NGX_BROTLI_VER \
     NGX_GEOIP2_VER=$NGX_GEOIP2_VER \
+    JSONSCHEMA_VER=$JSONSCHEMA_VER \
+    NETURL_VER=$NETURL_VER \
     RESTY_EXPR_VER=$RESTY_EXPR_VER \
     RESTY_HTTP_VER=$RESTY_HTTP_VER \
+    RESTY_HEALTHCHECK_VER=$RESTY_HEALTHCHECK_VER \
     RESTY_IPMATCHER_VER=$RESTY_IPMATCHER_VER \
     RESTY_RADIXTREE_VER=$RESTY_RADIXTREE_VER \
+    RESTY_EVENTS_VER=$RESTY_EVENTS_VER \
+    RESTY_TIMER_VER=$RESTY_TIMER_VER \
+    RESTY_CTXDUMP_VER=$RESTY_CTXDUMP_VER \
+    RESTY_BALANCER_VER=$RESTY_BALANCER_VER \
     USER=$USER \
     CONF_DIR=$CONF_DIR \
     HOME_DIR=$HOME_DIR \
@@ -167,6 +209,11 @@ RUN set -x \
         diffutils libtool procps-ng gd-devel libxslt-devel libxml2-devel
 
 COPY --from=downloader ${BUILD_DIR} ${BUILD_DIR}
+
+# Unpack lua-resty-events
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-events-${RESTY_EVENTS_VER}.tar.gz
 
 # Install zlib
 RUN set -x \
@@ -236,7 +283,8 @@ RUN set -x \
       -L${HOME_DIR}/zlib/lib \
       -Wl,-rpath,${HOME_DIR}/zlib/lib:${HOME_DIR}/openssl3/lib \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
-    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; }
+    && make install_sw > build.log 2>&1 || { cat build.log ; exit 1; } \
+    && rm -rf ${BUILD_DIR}/src/openssl-${OPENSSL_VER}
 
 # Install GeoIP
 RUN set -x \
@@ -356,9 +404,25 @@ RUN set -x \
         --with-pcre-jit \
         --add-module=${BUILD_DIR}/src/ngx_http_geoip2_module-${NGX_GEOIP2_VER} \
         --add-module=${BUILD_DIR}/src/ngx_brotli-${NGX_BROTLI_VER} \
+        --add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_VER} \
         --with-luajit-xcflags='-DLUAJIT_NUMMODE=2 -DLUAJIT_ENABLE_LUA52COMPAT' \
     && make -j`nproc` > build.log 2>&1 || { cat build.log ; exit 1; } \
     && make install
+
+# Install jsonschema
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/jsonschema-${JSONSCHEMA_VER}.tar.gz \
+    && cd jsonschema-${JSONSCHEMA_VER} \
+    && install -D -m 644 lib/jsonschema.lua ${LUA_LIB}/jsonschema.lua \
+    && install -D -m 644 lib/jsonschema/store.lua ${LUA_LIB}/jsonschema/store.lua
+
+# Install neturl
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/neturl-${NETURL_VER}.tar.gz \
+    && cd neturl-${NETURL_VER} \
+    && install -D -m 644 lib/net/url.lua ${LUA_LIB}/net/url.lua
 
 # Install lua-resty-expr
 RUN set -x \
@@ -373,7 +437,7 @@ RUN set -x \
     && cd ${BUILD_DIR}/src \
     && tar -zxf ${BUILD_DIR}/pkg/lua-resty-http-${RESTY_HTTP_VER}.tar.gz \
     && cd lua-resty-http-${RESTY_HTTP_VER} \
-    && make install INST_LUADIR=${LUA_LIB}
+    && make install LUA_LIB_DIR=${LUA_LIB}
 
 # Install lua-resty-ipmatcher
 RUN set -x \
@@ -389,6 +453,40 @@ RUN set -x \
     && cd lua-resty-radixtree-${RESTY_RADIXTREE_VER} \
     && make \
     && make install INST_LUADIR=${LUA_LIB} INST_LIBDIR=${LUA_LIB}
+
+# Install lua-resty-events
+RUN set -x \
+    && cd ${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_VER} \
+    && make install LUA_LIB_DIR=${LUA_LIB}
+
+# Install lua-resty-timer
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-timer-${RESTY_TIMER_VER}.tar.gz \
+    && cd lua-resty-timer-${RESTY_TIMER_VER} \
+    && make install LUA_LIB_DIR=${LUA_LIB}
+
+# Install lua-resty-healthcheck
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-healthcheck-${RESTY_HEALTHCHECK_VER}.tar.gz \
+    && cd lua-resty-healthcheck-${RESTY_HEALTHCHECK_VER} \
+    && make install LUA_LIB_DIR=${LUA_LIB}
+
+# Install lua-resty-ctxdump
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-ctxdump-${RESTY_CTXDUMP_VER}.tar.gz \
+    && cd lua-resty-ctxdump-${RESTY_CTXDUMP_VER} \
+    && make install LUA_LIB_DIR=${LUA_LIB}
+
+# Install lua-resty-balancer
+RUN set -x \
+    && cd ${BUILD_DIR}/src \
+    && tar -zxf ${BUILD_DIR}/pkg/lua-resty-balancer-${RESTY_BALANCER_VER}.tar.gz \
+    && cd lua-resty-balancer-${RESTY_BALANCER_VER} \
+    && make \
+    && make install LUA_LIB_DIR=${LUA_LIB}
 
 
 ### Runtime Stage
