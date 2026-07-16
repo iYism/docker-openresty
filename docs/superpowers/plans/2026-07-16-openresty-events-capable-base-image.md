@@ -440,6 +440,8 @@ Do not push yet.
 - the candidate index must contain exactly two descriptors: the tested `linux/amd64` child and the tested `linux/arm64` child, with no third descriptor;
 - public tag verification reads each top-level digest with `imagetools inspect --format '{{json .Manifest.Digest}}'`;
 - the workflow contract stays POSIX shell plus `awk`, `sed`, and `grep`; it must not depend on `yq`.
+- `source-contract` is a root job and omits the invalid empty `needs: []` key;
+- `publish` derives `DOCKER_CONFIG` from `$RUNNER_TEMP` in a bootstrap step and exports it through `$GITHUB_ENV`, because the `runner` context is not available in job-level `env`.
 
 - [ ] **Step 1: Write a focused failing workflow contract**
 
@@ -487,7 +489,6 @@ Use `ubuntu-24.04`, `permissions: contents: read`, and the pinned actions/images
 `source-contract`:
 
 ```yaml
-needs: []
 steps:
   - checkout with persist-credentials: false
   - run: |
@@ -522,7 +523,7 @@ EVIDENCE_DIR="$RUNNER_TEMP/evidence-${{ matrix.arch }}" tests/inventory-contract
 
 Neither job receives Docker Hub credentials or publishes.
 
-`publish` runs only for `push` on `main`, depends on both earlier jobs, uses `environment: build-image`, sets `DOCKER_CONFIG` to a runner-temp directory, and serializes with:
+`publish` runs only for `push` on `main`, depends on both earlier jobs, uses `environment: build-image`, derives `DOCKER_CONFIG` from `$RUNNER_TEMP` in a bootstrap step before Docker setup/login, exports it through `$GITHUB_ENV`, and serializes with:
 
 ```yaml
 concurrency:
