@@ -270,9 +270,10 @@ assert_block_count publish 1 "$publish_block" 'push-by-digest=true,name-canonica
 assert_block_count publish 1 "$publish_block" '--provenance=false'
 assert_block_count publish 1 "$publish_block" '--sbom=false'
 assert_block_count publish 1 "$publish_block" '.["containerimage.digest"]'
-assert_block_count publish 1 "$publish_block" '.["containerimage.descriptor.digest"]'
+assert_block_count publish 1 "$publish_block" '.["containerimage.descriptor"].digest'
+assert_block_not_contains publish "$publish_block" '.["containerimage.descriptor.digest"]'
 assert_block_contains publish "$publish_block" "digest=\$(jq -er '.[\"containerimage.digest\"]"
-assert_block_contains publish "$publish_block" "index_digest=\$(jq -er '.[\"containerimage.descriptor.digest\"]"
+assert_block_contains publish "$publish_block" "index_digest=\$(jq -er '.[\"containerimage.descriptor\"].digest"
 assert_block_contains publish "$publish_block" 'immutable="${REPO}@${digest}"'
 assert_block_contains publish "$publish_block" '"${REPO}@${AMD64_DIGEST}"'
 assert_block_contains publish "$publish_block" '"${REPO}@${ARM64_DIGEST}"'

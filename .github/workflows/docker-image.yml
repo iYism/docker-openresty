@@ -183,7 +183,7 @@ jobs:
             "${REPO}@${AMD64_DIGEST}" \
             "${REPO}@${ARM64_DIGEST}"
 
-          index_digest=$(jq -er '.["containerimage.descriptor.digest"] | select(test("^sha256:[0-9a-f]{64}$"))' \
+          index_digest=$(jq -er '.["containerimage.descriptor"].digest | select(test("^sha256:[0-9a-f]{64}$"))' \
             "$evidence_root/index-metadata.json")
           immutable_index="${REPO}@${index_digest}"
           IMMUTABLE_INDEX=$immutable_index
