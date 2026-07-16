@@ -130,6 +130,8 @@ assert_contains '&& cd "${src}" \' "$DOCKERFILE"
 assert_contains '&& make install LUA_LIB_DIR="${LUA_LIB}" \' "$DOCKERFILE"
 assert_not_contains 'install -m 0644 "${src}/lualib/resty/events/' "$DOCKERFILE"
 assert_contains 'install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"' "$DOCKERFILE"
+assert_before 'sha256sum -c ${BUILD_DIR}/locks/lua-resty-events.files.sha256' \
+    '&& make install LUA_LIB_DIR="${LUA_LIB}" \' "$DOCKERFILE"
 assert_not_contains 'resty/events/*.lua' "$DOCKERFILE"
 assert_contains 'COPY --from=builder ${HOME_DIR} ${HOME_DIR}' "$DOCKERFILE"
 

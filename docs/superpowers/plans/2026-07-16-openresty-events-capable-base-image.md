@@ -173,7 +173,7 @@ Create executable `tests/source-contract.sh` and `tests/events-archive-contract.
 5. require events SHA verification to occur before its `tar -zxf` line;
 6. reject any `ARG RESTY_EVENTS_` override;
 7. require `--add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT}` and reject `--add-dynamic-module` for events;
-8. require an explicit install command for each of the 11 Lua files and the license;
+8. require the pinned upstream Makefile installer, followed by an explicit license install;
 9. reject glob installation for `resty/events/*.lua`;
 10. require the final image to inherit the installed license through the existing `${HOME_DIR}` copy.
 
