@@ -11,6 +11,7 @@ EVIDENCE_DIR=${EVIDENCE_DIR:-/tmp/openresty-events-evidence}
 platform_slug=$(printf '%s' "${platform:-native}" | tr '/:' '--')
 EVIDENCE_LOG=${EVIDENCE_DIR}/events-${platform_slug}.log
 container=openresty-events-contract-$$
+container_id=
 container_started=0
 old_worker_0=
 old_worker_1=
@@ -38,13 +39,13 @@ cleanup() {
     mkdir -p "$EVIDENCE_DIR"
     if [ "$container_started" -eq 1 ]; then
         {
-            docker logs "$container" 2>&1 || true
+            docker logs "$container_id" 2>&1 || true
             printf '\nevents-contract summary old_worker_0=%s old_worker_1=%s old_privileged=%s\n' \
                 "$old_worker_0" "$old_worker_1" "$old_privileged"
             printf 'events-contract summary new_worker_0=%s new_worker_1=%s new_privileged=%s\n' \
                 "$new_worker_0" "$new_worker_1" "$new_privileged"
         } >"$EVIDENCE_LOG"
-        docker rm -f "$container" >/dev/null 2>&1 || true
+        docker rm -f "$container_id" >/dev/null 2>&1 || true
     fi
     exit "$status"
 }
@@ -69,22 +70,36 @@ done
 nginx_v=$(docker_run --rm --entrypoint /bin/sh "$IMAGE" -c '/usr/sbin/nginx -V 2>&1') \
     || fail "unable to execute nginx -V"
 
-require_nginx_v() {
-    printf '%s\n' "$nginx_v" | grep -F -- "$1" >/dev/null \
-        || fail "nginx -V missing: $1"
+nginx_version_count=$(printf '%s\n' "$nginx_v" \
+    | grep -F -x -c -- 'nginx version: openresty/1.31.1.1' || true)
+[ "$nginx_version_count" -eq 1 ] \
+    || fail "nginx version line count is ${nginx_version_count}, expected exact OpenResty 1.31.1.1 once"
+
+openssl_version_count=$(printf '%s\n' "$nginx_v" | awk '
+    $1 == "built" && $2 == "with" && $3 == "OpenSSL" && $4 == "3.5.6" { count++ }
+    END { print count + 0 }
+')
+[ "$openssl_version_count" -eq 1 ] \
+    || fail "OpenSSL version token count is ${openssl_version_count}, expected 3.5.6 once"
+
+configure_line_count=$(printf '%s\n' "$nginx_v" | grep -c '^configure arguments: ' || true)
+[ "$configure_line_count" -eq 1 ] \
+    || fail "configure arguments line count is ${configure_line_count}, expected 1"
+configure_args=$(printf '%s\n' "$nginx_v" | sed -n 's/^configure arguments: //p')
+
+require_configure_token() {
+    token_count=$(printf '%s\n' "$configure_args" | tr ' ' '\n' | grep -F -x -c -- "$1" || true)
+    [ "$token_count" -eq 1 ] || fail "configure token count for $1 is ${token_count}, expected 1"
 }
 
-require_nginx_v 'nginx version: openresty/1.31.1.1'
-require_nginx_v 'built with OpenSSL 3.5.6'
-require_nginx_v '--add-module=../ngx_lua-0.10.31rc5'
-require_nginx_v '--with-http_v2_module'
-require_nginx_v '--with-http_v3_module'
-require_nginx_v '--add-module=/build/openresty/src/ngx_http_geoip2_module-3.4'
-require_nginx_v '--add-module=/build/openresty/src/ngx_brotli-master'
+require_configure_token '--add-module=../ngx_lua-0.10.31rc5'
+require_configure_token '--with-http_v2_module'
+require_configure_token '--with-http_v3_module'
+require_configure_token '--add-module=/build/openresty/src/ngx_http_geoip2_module-3.4'
+require_configure_token '--add-module=/build/openresty/src/ngx_brotli-master'
 
 events_module=--add-module=/build/openresty/src/lua-resty-events-bc85295b7c23eda2dbf2b4acec35c93f77b26787
-events_count=$(printf '%s\n' "$nginx_v" | tr ' ' '\n' | grep -F -x -c -- "$events_module" || true)
-[ "$events_count" -eq 1 ] || fail "events static configure input count is ${events_count}, expected 1"
+require_configure_token "$events_module"
 if printf '%s\n' "$nginx_v" | grep -F -- '--add-dynamic-module=/build/openresty/src/lua-resty-events-' >/dev/null; then
     fail "lua-resty-events must not be a dynamic module"
 fi
@@ -152,7 +167,7 @@ container_started=1
 host_port=
 attempt=0
 while [ "$attempt" -lt 100 ]; do
-    host_port=$(docker port "$container" 8080/tcp 2>/dev/null | sed -n '1s/.*://p')
+    host_port=$(docker port "$container_id" 8080/tcp 2>/dev/null | sed -n '1s/.*://p')
     [ -n "$host_port" ] && break
     attempt=$((attempt + 1))
     sleep 0.1
@@ -175,9 +190,15 @@ wait_body() {
     fail "${path} did not return ${expected}"
 }
 
-receiver_pids() {
+logs_after_line() {
+    boundary=$1
+    docker logs "$container_id" 2>&1 | sed -n "$((boundary + 1)),\$p"
+}
+
+receiver_pids_after() {
     receiver=$1
-    docker logs "$container" 2>&1 \
+    boundary=$2
+    logs_after_line "$boundary" \
         | sed -n "s/.*events-contract initialized receiver=${receiver} pid=\([0-9][0-9]*\).*/\1/p" \
         | awk '!seen[$0]++'
 }
@@ -186,7 +207,7 @@ wait_initial_pid() {
     receiver=$1
     attempt=0
     while [ "$attempt" -lt 150 ]; do
-        pid=$(receiver_pids "$receiver" | sed -n '1p')
+        pid=$(receiver_pids_after "$receiver" 0 | sed -n '1p')
         if [ -n "$pid" ]; then
             printf '%s\n' "$pid"
             return 0
@@ -197,12 +218,29 @@ wait_initial_pid() {
     fail "missing initial PID for ${receiver}"
 }
 
-wait_new_pid() {
-    receiver=$1
-    old_pid=$2
+wait_reload_marker() {
+    boundary=$1
     attempt=0
     while [ "$attempt" -lt 200 ]; do
-        pid=$(receiver_pids "$receiver" | awk -v old="$old_pid" '$0 != old { print; exit }')
+        marker_offset=$(logs_after_line "$boundary" \
+            | grep -n -F 'signal 1 (SIGHUP) received, reconfiguring' \
+            | sed -n '1s/:.*//p')
+        if [ -n "$marker_offset" ]; then
+            printf '%s\n' "$((boundary + marker_offset))"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    fail "missing post-HUP master reconfiguring marker"
+}
+
+wait_new_pid() {
+    receiver=$1
+    reload_marker_line=$2
+    attempt=0
+    while [ "$attempt" -lt 200 ]; do
+        pid=$(receiver_pids_after "$receiver" "$reload_marker_line" | sed -n '1p')
         if [ -n "$pid" ]; then
             printf '%s\n' "$pid"
             return 0
@@ -225,7 +263,7 @@ wait_delivery() {
     pattern="events-contract event=${event} receiver=${receiver} pid=${pid} data=${event}"
     attempt=0
     while [ "$attempt" -lt 150 ]; do
-        if docker logs "$container" 2>&1 | grep -F -- "$pattern" >/dev/null; then
+        if docker logs "$container_id" 2>&1 | grep -F -- "$pattern" >/dev/null; then
             return 0
         fi
         attempt=$((attempt + 1))
@@ -239,7 +277,7 @@ reject_delivery() {
     receiver=$2
     pid=$3
     pattern="events-contract event=${event} receiver=${receiver} pid=${pid} data=${event}"
-    if docker logs "$container" 2>&1 | grep -F -- "$pattern" >/dev/null; then
+    if docker logs "$container_id" 2>&1 | grep -F -- "$pattern" >/dev/null; then
         fail "stale-generation delivery observed: ${pattern}"
     fi
 }
@@ -248,7 +286,7 @@ wait_pid_gone() {
     pid=$1
     attempt=0
     while [ "$attempt" -lt 200 ]; do
-        if ! docker exec "$container" /bin/sh -c "kill -0 ${pid}" >/dev/null 2>&1; then
+        if ! docker exec "$container_id" /bin/sh -c "kill -0 ${pid}" >/dev/null 2>&1; then
             return 0
         fi
         attempt=$((attempt + 1))
@@ -279,18 +317,20 @@ old_worker_1=$(wait_initial_pid worker-1)
 old_privileged=$(wait_initial_pid privileged)
 assert_distinct "$old_worker_0" "$old_worker_1" "$old_privileged"
 wait_broker_pid "$old_worker_0"
-master_pid=$(docker inspect --format '{{.State.Pid}}' "$container")
+master_pid=$(docker inspect --format '{{.State.Pid}}' "$container_id")
 
 wait_body '/publish?id=before-hup' published-before-hup
 wait_delivery before-hup worker-0 "$old_worker_0"
 wait_delivery before-hup worker-1 "$old_worker_1"
 wait_delivery before-hup privileged "$old_privileged"
 
-docker kill --signal HUP "$container" >/dev/null
+reload_log_boundary=$(docker logs "$container_id" 2>&1 | wc -l | tr -d ' ')
+docker kill --signal HUP "$container_id" >/dev/null
+reload_marker_line=$(wait_reload_marker "$reload_log_boundary")
 
-new_worker_0=$(wait_new_pid worker-0 "$old_worker_0")
-new_worker_1=$(wait_new_pid worker-1 "$old_worker_1")
-new_privileged=$(wait_new_pid privileged "$old_privileged")
+new_worker_0=$(wait_new_pid worker-0 "$reload_marker_line")
+new_worker_1=$(wait_new_pid worker-1 "$reload_marker_line")
+new_privileged=$(wait_new_pid privileged "$reload_marker_line")
 assert_distinct "$new_worker_0" "$new_worker_1" "$new_privileged"
 [ "$new_worker_0" != "$old_worker_0" ] || fail "worker-0 PID did not change"
 [ "$new_worker_1" != "$old_worker_1" ] || fail "worker-1 PID did not change"
@@ -299,7 +339,7 @@ assert_distinct "$new_worker_0" "$new_worker_1" "$new_privileged"
 wait_pid_gone "$old_worker_0"
 wait_pid_gone "$old_worker_1"
 wait_pid_gone "$old_privileged"
-[ "$(docker inspect --format '{{.State.Pid}}' "$container")" = "$master_pid" ] \
+[ "$(docker inspect --format '{{.State.Pid}}' "$container_id")" = "$master_pid" ] \
     || fail "master PID changed across HUP"
 wait_broker_pid "$new_worker_0"
 
@@ -311,7 +351,7 @@ reject_delivery after-hup worker-0 "$old_worker_0"
 reject_delivery after-hup worker-1 "$old_worker_1"
 reject_delivery after-hup privileged "$old_privileged"
 
-logs=$(docker logs "$container" 2>&1)
+logs=$(docker logs "$container_id" 2>&1)
 if printf '%s\n' "$logs" | grep -E '\[(emerg|alert|crit)\]|events-contract (publish|init|privileged-agent init) failed|publish failed' >/dev/null; then
     fail "fixture logs contain a fatal contract error"
 fi

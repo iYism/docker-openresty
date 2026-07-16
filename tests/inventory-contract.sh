@@ -9,6 +9,7 @@ platform_arg=${2:-}
 EVIDENCE_DIR=${EVIDENCE_DIR:-/tmp/openresty-events-evidence}
 EVENTS_FILES=${ROOT}/dependencies/lua-resty-events.files.sha256
 EVENTS_MODULE=--add-module=/build/openresty/src/lua-resty-events-bc85295b7c23eda2dbf2b4acec35c93f77b26787
+NGX_LUA_MODULE=--add-module=../ngx_lua-0.10.31rc5
 tmpdir=
 
 fail() {
@@ -130,12 +131,19 @@ capture_nginx_v "$BASELINE_IMAGE" "${tmpdir}/baseline-nginx-v"
 capture_nginx_v "$NEW_IMAGE" "${tmpdir}/new-nginx-v"
 
 for file in "${tmpdir}/baseline-nginx-v" "${tmpdir}/new-nginx-v"; do
-    grep -F 'nginx version: openresty/1.31.1.1' "$file" >/dev/null \
-        || fail "OpenResty version changed in $file"
-    grep -F 'built with OpenSSL 3.5.6' "$file" >/dev/null \
-        || fail "OpenSSL version changed in $file"
-    grep -F -- '--add-module=../ngx_lua-0.10.31rc5' "$file" >/dev/null \
-        || fail "ngx_lua version changed in $file"
+    nginx_version_count=$(grep -F -x -c -- 'nginx version: openresty/1.31.1.1' "$file" || true)
+    [ "$nginx_version_count" -eq 1 ] \
+        || fail "OpenResty version line changed in $file"
+    openssl_version_count=$(awk '
+        $1 == "built" && $2 == "with" && $3 == "OpenSSL" && $4 == "3.5.6" { count++ }
+        END { print count + 0 }
+    ' "$file")
+    [ "$openssl_version_count" -eq 1 ] \
+        || fail "OpenSSL version token changed in $file"
+    ngx_lua_count=$(sed -n 's/^configure arguments: //p' "$file" \
+        | tr ' ' '\n' | grep -F -x -c -- "$NGX_LUA_MODULE" || true)
+    [ "$ngx_lua_count" -eq 1 ] \
+        || fail "ngx_lua configure token changed in $file"
 done
 
 sed -n 's/^configure arguments: //p' "${tmpdir}/baseline-nginx-v" >"${tmpdir}/baseline-configure"

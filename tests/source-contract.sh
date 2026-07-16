@@ -7,6 +7,8 @@ DOCKERFILE=${ROOT}/Dockerfile
 OPENRESTY_LOCK=${ROOT}/dependencies/openresty.lock
 EVENTS_LOCK=${ROOT}/dependencies/lua-resty-events.lock
 EVENTS_FILES=${ROOT}/dependencies/lua-resty-events.files.sha256
+IMAGE_CONTRACT=${ROOT}/tests/image-contract.sh
+INVENTORY_CONTRACT=${ROOT}/tests/inventory-contract.sh
 
 fail() {
     printf 'source-contract: FAIL: %s\n' "$*" >&2
@@ -136,6 +138,34 @@ assert_not_contains 'resty/events/*.lua' "$DOCKERFILE"
 assert_contains 'COPY --from=builder ${HOME_DIR} ${HOME_DIR}' "$DOCKERFILE"
 
 assert_contains 'rm -rf "${BUILD_DIR}/src/openssl-${OPENSSL_VER}"' "$DOCKERFILE"
+
+[ -f "$IMAGE_CONTRACT" ] || fail "missing image contract: ${IMAGE_CONTRACT}"
+[ -f "$INVENTORY_CONTRACT" ] || fail "missing inventory contract: ${INVENTORY_CONTRACT}"
+
+assert_contains 'grep -F -x -c -- '\''nginx version: openresty/1.31.1.1'\''' "$IMAGE_CONTRACT"
+assert_contains '$4 == "3.5.6"' "$IMAGE_CONTRACT"
+assert_contains 'require_configure_token '\''' "$IMAGE_CONTRACT"
+assert_contains 'grep -F -x -c -- '\''nginx version: openresty/1.31.1.1'\''' "$INVENTORY_CONTRACT"
+assert_contains '$4 == "3.5.6"' "$INVENTORY_CONTRACT"
+assert_contains 'grep -F -x -c -- "$NGX_LUA_MODULE"' "$INVENTORY_CONTRACT"
+
+assert_contains 'reload_log_boundary=' "$IMAGE_CONTRACT"
+assert_contains 'reload_marker_line=$(wait_reload_marker "$reload_log_boundary")' "$IMAGE_CONTRACT"
+assert_contains 'receiver_pids_after "$receiver" "$reload_marker_line"' "$IMAGE_CONTRACT"
+assert_not_contains 'awk -v old="$old_pid" '\''$0 != old { print; exit }'\''' "$IMAGE_CONTRACT"
+
+assert_contains 'docker logs "$container_id"' "$IMAGE_CONTRACT"
+assert_contains 'docker port "$container_id"' "$IMAGE_CONTRACT"
+assert_contains 'docker exec "$container_id"' "$IMAGE_CONTRACT"
+assert_contains 'docker inspect --format '\''{{.State.Pid}}'\'' "$container_id"' "$IMAGE_CONTRACT"
+assert_contains 'docker kill --signal HUP "$container_id"' "$IMAGE_CONTRACT"
+assert_contains 'docker rm -f "$container_id"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker logs "$container"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker port "$container"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker exec "$container"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker inspect --format '\''{{.State.Pid}}'\'' "$container"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker kill --signal HUP "$container"' "$IMAGE_CONTRACT"
+assert_not_contains 'docker rm -f "$container"' "$IMAGE_CONTRACT"
 
 download_count=$(grep -c '&& curl ' "$DOCKERFILE")
 [ "$download_count" -eq 15 ] || fail "expected 15 source downloads, found ${download_count}"
