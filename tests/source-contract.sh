@@ -5,6 +5,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DOCKERFILE=${ROOT}/Dockerfile
 OPENRESTY_LOCK=${ROOT}/dependencies/openresty.lock
+ZLIB_LOCK=${ROOT}/dependencies/zlib.lock
 EVENTS_LOCK=${ROOT}/dependencies/lua-resty-events.lock
 EVENTS_FILES=${ROOT}/dependencies/lua-resty-events.files.sha256
 IMAGE_CONTRACT=${ROOT}/tests/image-contract.sh
@@ -86,6 +87,10 @@ OPENRESTY_ARCHIVE=https://openresty.org/download/openresty-1.31.1.1.tar.gz
 OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
 OPENRESTY_SIGNER_FINGERPRINT=25451EB088460026195BD62CB550E09EA0E98066'
 
+ZLIB_EXPECTED='ZLIB_VERSION=1.3.2
+ZLIB_ARCHIVE=https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+ZLIB_SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16'
+
 EVENTS_EXPECTED='RESTY_EVENTS_REPOSITORY=https://github.com/Kong/lua-resty-events
 RESTY_EVENTS_VERSION=0.3.1
 RESTY_EVENTS_COMMIT=bc85295b7c23eda2dbf2b4acec35c93f77b26787
@@ -113,6 +118,7 @@ a157ffe97fa0f1901eef93c52c63b7828b9b42b9f711a56002115d2d19dc495f  lualib/resty/e
 a2a9f62a94616c2e8f18c6f65b6fbf814b0e7b1aee94bb405b7a71c09e4842a5  lualib/resty/events/worker.lua'
 
 assert_file_exact "$OPENRESTY_EXPECTED" "$OPENRESTY_LOCK" "OpenResty lock"
+assert_file_exact "$ZLIB_EXPECTED" "$ZLIB_LOCK" "zlib lock"
 assert_file_exact "$EVENTS_EXPECTED" "$EVENTS_LOCK" "lua-resty-events lock"
 assert_file_exact "$EVENTS_FILES_EXPECTED" "$EVENTS_FILES" "lua-resty-events file inventory"
 
@@ -120,6 +126,9 @@ assert_lock_value "$OPENRESTY_LOCK" OPENRESTY_VERSION 1.31.1.1
 assert_lock_value "$OPENRESTY_LOCK" OPENRESTY_ARCHIVE https://openresty.org/download/openresty-1.31.1.1.tar.gz
 assert_lock_value "$OPENRESTY_LOCK" OPENRESTY_SHA256 65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
 assert_lock_value "$OPENRESTY_LOCK" OPENRESTY_SIGNER_FINGERPRINT 25451EB088460026195BD62CB550E09EA0E98066
+assert_lock_value "$ZLIB_LOCK" ZLIB_VERSION 1.3.2
+assert_lock_value "$ZLIB_LOCK" ZLIB_ARCHIVE https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+assert_lock_value "$ZLIB_LOCK" ZLIB_SHA256 bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
 assert_lock_value "$EVENTS_LOCK" RESTY_EVENTS_REPOSITORY https://github.com/Kong/lua-resty-events
 assert_lock_value "$EVENTS_LOCK" RESTY_EVENTS_VERSION 0.3.1
 assert_lock_value "$EVENTS_LOCK" RESTY_EVENTS_COMMIT bc85295b7c23eda2dbf2b4acec35c93f77b26787
@@ -132,15 +141,22 @@ assert_lock_value "$EVENTS_LOCK" RESTY_EVENTS_NGINX_MODULE_NAME ngx_lua_events_m
 assert_lock_value "$EVENTS_LOCK" RESTY_EVENTS_NGINX_MODULE_SOURCE src/ngx_lua_events_module.c
 
 assert_contains 'COPY dependencies/openresty.lock \' "$DOCKERFILE"
+assert_contains 'dependencies/zlib.lock \' "$DOCKERFILE"
 assert_contains 'dependencies/lua-resty-events.lock \' "$DOCKERFILE"
 assert_contains 'dependencies/lua-resty-events.files.sha256 \' "$DOCKERFILE"
 assert_contains '${BUILD_DIR}/locks/' "$DOCKERFILE"
 assert_contains '. ${BUILD_DIR}/locks/openresty.lock' "$DOCKERFILE"
+assert_contains '. ${BUILD_DIR}/locks/zlib.lock' "$DOCKERFILE"
 assert_contains '. ${BUILD_DIR}/locks/lua-resty-events.lock' "$DOCKERFILE"
 assert_contains 'test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}"' "$DOCKERFILE"
+assert_contains 'test "${ZLIB_VER}" = "${ZLIB_VERSION}"' "$DOCKERFILE"
+assert_contains '-o zlib-${ZLIB_VER}.tar.gz "${ZLIB_ARCHIVE}"' "$DOCKERFILE"
+assert_not_contains 'https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz' "$DOCKERFILE"
 
 assert_before 'echo "${OPENRESTY_SHA256}  openresty-${OPENRESTY_VER}.tar.gz" | sha256sum -c -' \
     'tar -zxf ${BUILD_DIR}/pkg/openresty-${OPENRESTY_VER}.tar.gz' "$DOCKERFILE"
+assert_before 'echo "${ZLIB_SHA256}  zlib-${ZLIB_VER}.tar.gz" | sha256sum -c -' \
+    'tar -zxf ${BUILD_DIR}/pkg/zlib-${ZLIB_VER}.tar.gz' "$DOCKERFILE"
 assert_before 'echo "${RESTY_EVENTS_SHA256}  lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz" | sha256sum -c -' \
     'tar -zxf ${BUILD_DIR}/pkg/lua-resty-events-${RESTY_EVENTS_COMMIT}.tar.gz' "$DOCKERFILE"
 

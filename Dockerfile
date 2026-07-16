@@ -75,6 +75,7 @@ ARG OPENRESTY_VER \
     BUILD_DIR
 
 COPY dependencies/openresty.lock \
+     dependencies/zlib.lock \
      dependencies/lua-resty-events.lock \
      dependencies/lua-resty-events.files.sha256 \
      ${BUILD_DIR}/locks/
@@ -84,8 +85,10 @@ WORKDIR ${BUILD_DIR}
 
 RUN set -eux \
     && . ${BUILD_DIR}/locks/openresty.lock \
+    && . ${BUILD_DIR}/locks/zlib.lock \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && test "${OPENRESTY_VER}" = "${OPENRESTY_VERSION}" \
+    && test "${ZLIB_VER}" = "${ZLIB_VERSION}" \
     && mkdir -p ${BUILD_DIR}/pkg ${BUILD_DIR}/src \
     && cd ${BUILD_DIR}/pkg \
 # Download openresty
@@ -93,7 +96,9 @@ RUN set -eux \
         -o openresty-${OPENRESTY_VER}.tar.gz "${OPENRESTY_ARCHIVE}" \
     && echo "${OPENRESTY_SHA256}  openresty-${OPENRESTY_VER}.tar.gz" | sha256sum -c - \
 # Download zlib
-    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o zlib-${ZLIB_VER}.tar.gz https://www.zlib.net/zlib-${ZLIB_VER}.tar.gz \
+    && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 \
+        -o zlib-${ZLIB_VER}.tar.gz "${ZLIB_ARCHIVE}" \
+    && echo "${ZLIB_SHA256}  zlib-${ZLIB_VER}.tar.gz" | sha256sum -c - \
 # Download pcre2
     && curl -fL --retry 5 --retry-all-errors --connect-timeout 20 --max-time 600 -o pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
