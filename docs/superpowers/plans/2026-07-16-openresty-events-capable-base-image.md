@@ -248,24 +248,17 @@ Add this one configure argument next to the existing static modules:
 --add-module=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
 ```
 
-Install the exact files without globs:
+Use the pinned upstream commit's official one-command Makefile installer. The
+archive hash fixes the complete source tree, while the per-file manifest verifies
+the runtime files before this target is invoked:
 
 ```dockerfile
 RUN set -eux \
     && . ${BUILD_DIR}/locks/lua-resty-events.lock \
     && src=${BUILD_DIR}/src/lua-resty-events-${RESTY_EVENTS_COMMIT} \
-    && install -d ${LUA_LIB}/resty/events/compat ${HOME_DIR}/licenses/lua-resty-events \
-    && install -m 0644 "${src}/lualib/resty/events/broker.lua" "${LUA_LIB}/resty/events/broker.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/callback.lua" "${LUA_LIB}/resty/events/callback.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/codec.lua" "${LUA_LIB}/resty/events/codec.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/disable_listening.lua" "${LUA_LIB}/resty/events/disable_listening.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/frame.lua" "${LUA_LIB}/resty/events/frame.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/init.lua" "${LUA_LIB}/resty/events/init.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/protocol.lua" "${LUA_LIB}/resty/events/protocol.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/queue.lua" "${LUA_LIB}/resty/events/queue.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/utils.lua" "${LUA_LIB}/resty/events/utils.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/worker.lua" "${LUA_LIB}/resty/events/worker.lua" \
-    && install -m 0644 "${src}/lualib/resty/events/compat/init.lua" "${LUA_LIB}/resty/events/compat/init.lua" \
+    && install -d ${HOME_DIR}/licenses/lua-resty-events \
+    && cd "${src}" \
+    && make install LUA_LIB_DIR="${LUA_LIB}" \
     && install -m 0644 "${src}/LICENSE" "${HOME_DIR}/licenses/lua-resty-events/LICENSE"
 ```
 
