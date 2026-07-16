@@ -1,7 +1,101 @@
 # Ngatex Gateway Runtime Phase 2 Handoff
 
 **Recorded:** 2026-07-16 15:15:54 +0800  
-**Status:** Paused by the user and incomplete. Resume at Task 2 verification and review; do not restart the work.
+**Updated:** 2026-07-16 16:47:25 +0800
+**Status:** Task 2 is complete and re-reviewed. Stop before Task 3; no Task 3 work has started.
+
+## 2026-07-16 16:47 Task 2 completion and persistent migration update
+
+The resume branch was migrated non-destructively into the persistent Git object
+store requested by the user:
+
+```text
+Git common directory: /Users/jiangmeng/GitProjects/docker-openresty/.git
+persistent worktree: /Users/jiangmeng/GitProjects/docker-openresty-phase2-events-resume-20260716
+branch: codex/ngatex-phase2-events-base-resume-20260716
+code head before this handoff update: aa47853
+```
+
+The migration was first verified at the required pre-development HEAD
+`3f68c451419a7b53f1dc783c2610c029f14115ed`. The original
+`/Users/jiangmeng/GitProjects/docker-openresty` worktree remains clean on
+`main` at `74c291a`. The old resume worktree remains intact at:
+
+```text
+/Users/jiangmeng/GitProjects/ngatex/.worktrees/docker-openresty-phase2-events-resume
+Git common directory: /private/tmp/docker-openresty-phase2-plan-repo/.git
+HEAD: 3f68c451419a7b53f1dc783c2610c029f14115ed
+```
+
+No old worktree or `/private/tmp` Git data was removed. File hashes for the
+Dockerfile, dependency locks, Task 2 contracts, and this handoff matched across
+the old and persistent worktrees immediately after migration.
+
+Task 2 specification compliance passed before code-quality review. The quality
+review then found two blocking failure-mode gaps:
+
+1. a successful-looking image contract could print `PASS` before durable
+   evidence capture and suppress evidence/container cleanup failures;
+2. any failed `docker exec` could be mistaken for proof that an old PID exited.
+
+These were fixed and locked by separate commits:
+
+```text
+b136712 test: fail closed on events evidence cleanup
+2ec01ef test: lock events cleanup control flow
+aa47853 test: require cleanup failure accounting
+```
+
+The image contract now atomically writes logs plus the old/new PID summary,
+successfully removes the exact immutable `container_id`, and only then prints
+`PASS`. Old-process exit succeeds only when a successful in-container probe
+returns the explicit `gone` state; Docker exec/daemon failures retry or fail
+instead of false-passing. The source contract locks the cleanup status flow,
+both cleanup-failure assignments, the unique `gone` success return, and the
+explicit `alive`/`gone` probe.
+
+Regression probes proved that the source contract rejects all of these
+deliberate regressions:
+
+- cleanup failure overwrites or bypasses the original status policy;
+- `alive` is allowed to return success;
+- either evidence or container-removal cleanup failure is not recorded.
+
+An unwritable evidence-directory probe also exited nonzero without printing
+`image-contract: PASS`, while still removing the task container. The reviewer's
+cached-mutable-image concern was re-evaluated as non-blocking/YAGNI: approved
+mutable tags are freshly built local candidates, while remote release inputs
+are immutable `repo@sha256` references.
+
+Final review result:
+
+```text
+specification review: PASS
+code-quality re-review: Blocking findings resolved
+```
+
+Fresh complete Task 2 gate at code head `aa47853`:
+
+```text
+sh -n tests/*.sh: PASS
+tests/source-contract.sh: PASS
+tests/events-archive-contract.sh /private/tmp/lua-resty-events-bc85295b.tar.gz: PASS
+tests/image-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+  old worker-0/worker-1/privileged PIDs: 2,3,4
+  new worker-0/worker-1/privileged PIDs: 5,6,7
+tests/inventory-contract.sh sungyism/openresty:events-contract linux/arm64: PASS
+git diff --check: PASS
+git status --short: clean
+```
+
+Evidence remains at:
+
+```text
+/private/tmp/openresty-events-evidence/final-arm64/events-linux-arm64.log
+```
+
+Task 3 is the next plan task but was intentionally not started. No push, PR,
+merge, image publication, or Ngatex Phase 2A work occurred.
 
 ## 2026-07-16 15:53 pause update
 
