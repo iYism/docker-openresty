@@ -12,18 +12,19 @@ ARG HTTPS_PROXY
 ARG NO_PROXY
 
 # Define version arguments for OpenResty and its dependencies
-ARG OPENRESTY_VER=1.31.1.1
+ARG OPENRESTY_VER=1.31.8.1
 ARG ZLIB_VER=1.3.2
-ARG PCRE2_VER=10.47
-ARG OPENSSL_VER=3.5.6
-# OpenResty publishes sess_set_get_cb_yield patches per OpenSSL version (e.g. 3.5.5);
-# a patch generally applies to that version and later patch releases in the series.
-# Set this to the latest patch version at or below OPENSSL_VER.
+ARG PCRE2_VER=10.49
+# Use the latest OpenSSL 3.5 LTS release supported by OpenResty's yield patch.
+ARG OPENSSL_VER=3.5.9
+# Select a sess_set_get_cb_yield patch bundled with OPENRESTY_VER.
+# Its version can differ from OPENSSL_VER; verify it applies when upgrading.
 ARG OPENSSL_PATCH_VER=3.5.5
 ARG GEOIP_VER=1.6.12
-ARG LIBMAXMINDDB_VER=1.13.3
-ARG BROTLI_VER=1.2.0
-ARG NGX_BROTLI_VER=master
+ARG LIBMAXMINDDB_VER=1.14.1
+ARG BROTLI_VER=1.2.1
+# ngx_brotli has no release tags; pin the latest upstream commit.
+ARG NGX_BROTLI_VER=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
 ARG NGX_GEOIP2_VER=3.4
 ARG JSONSCHEMA_VER=0.9.13
 ARG NETURL_VER=1.2-1
@@ -96,39 +97,39 @@ RUN set -x \
     && mkdir -p {pkg,src} \
     && cd ${BUILD_DIR}/pkg \
 # Download openresty
-    && curl -Lo openresty-${OPENRESTY_VER}.tar.gz https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz \
+    && curl -fLo openresty-${OPENRESTY_VER}.tar.gz https://openresty.org/download/openresty-${OPENRESTY_VER}.tar.gz \
 # Download zlib
-    && curl -Lo zlib-${ZLIB_VER}.tar.gz https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib-${ZLIB_VER}.tar.gz \
+    && curl -fLo zlib-${ZLIB_VER}.tar.gz https://github.com/madler/zlib/releases/download/v${ZLIB_VER}/zlib-${ZLIB_VER}.tar.gz \
 # Download pcre2
-    && curl -Lo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
+    && curl -fLo pcre2-${PCRE2_VER}.tar.gz https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz \
 # Download openssl
-    && curl -Lo openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
-# Download openssl sess_set_get_cb_yield.patch (version pinned via OPENSSL_PATCH_VER)
-    && curl -fLo openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch https://github.com/openresty/openresty/raw/refs/heads/master/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
+    && curl -fLo openssl-${OPENSSL_VER}.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz \
+# Extract the OpenSSL yield patch from the selected OpenResty release
+    && tar -xOf openresty-${OPENRESTY_VER}.tar.gz openresty-${OPENRESTY_VER}/patches/openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch > openssl-${OPENSSL_PATCH_VER}-sess_set_get_cb_yield.patch \
 # Download GeoIP
-    && curl -Lo GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
+    && curl -fLo GeoIP-${GEOIP_VER}.tar.gz https://github.com/maxmind/geoip-api-c/releases/download/v${GEOIP_VER}/GeoIP-${GEOIP_VER}.tar.gz \
 # Download libmaxminddb
-    && curl -Lo libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
+    && curl -fLo libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/${LIBMAXMINDDB_VER}/libmaxminddb-${LIBMAXMINDDB_VER}.tar.gz \
 # Download brotli
-    && curl -Lo brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
+    && curl -fLo brotli-${BROTLI_VER}.tar.gz https://github.com/google/brotli/archive/refs/tags/v${BROTLI_VER}.tar.gz \
 # Download ngx_brotli
-    && curl -Lo ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/refs/heads/${NGX_BROTLI_VER}.tar.gz \
+    && curl -fLo ngx_brotli-${NGX_BROTLI_VER}.tar.gz https://github.com/google/ngx_brotli/archive/${NGX_BROTLI_VER}.tar.gz \
 # Download ngx_http_geoip2_module
-    && curl -Lo ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
+    && curl -fLo ngx_http_geoip2_module-${NGX_GEOIP2_VER}.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_GEOIP2_VER}.tar.gz \
 # Download jsonschema
     && curl -Lo jsonschema-${JSONSCHEMA_VER}.tar.gz https://github.com/api7/jsonschema/archive/refs/tags/v${JSONSCHEMA_VER}.tar.gz \
 # Download neturl
     && curl -Lo neturl-${NETURL_VER}.tar.gz https://github.com/golgote/neturl/archive/refs/tags/v${NETURL_VER}.tar.gz \
 # Download lua-resty-expr
-    && curl -Lo lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
+    && curl -fLo lua-resty-expr-${RESTY_EXPR_VER}.tar.gz https://github.com/api7/lua-resty-expr/archive/refs/tags/v${RESTY_EXPR_VER}.tar.gz \
 # Download lua-resty-http
-    && curl -Lo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/Kong/lua-resty-http/archive/refs/tags/${RESTY_HTTP_VER}.tar.gz \
+    && curl -fLo lua-resty-http-${RESTY_HTTP_VER}.tar.gz https://github.com/Kong/lua-resty-http/archive/refs/tags/${RESTY_HTTP_VER}.tar.gz \
 # Download lua-resty-healthcheck
     && curl -Lo lua-resty-healthcheck-${RESTY_HEALTHCHECK_VER}.tar.gz https://github.com/Kong/lua-resty-healthcheck/archive/refs/tags/${RESTY_HEALTHCHECK_VER}.tar.gz \
 # Download lua-resty-ipmatcher
-    && curl -Lo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
+    && curl -fLo lua-resty-ipmatcher-${RESTY_IPMATCHER_VER}.tar.gz https://github.com/api7/lua-resty-ipmatcher/archive/refs/tags/v${RESTY_IPMATCHER_VER}.tar.gz \
 # Download lua-resty-radixtree
-    && curl -Lo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
+    && curl -fLo lua-resty-radixtree-${RESTY_RADIXTREE_VER}.tar.gz https://github.com/api7/lua-resty-radixtree/archive/refs/tags/v${RESTY_RADIXTREE_VER}.tar.gz \
 # Download lua-resty-events
     && curl -Lo lua-resty-events-${RESTY_EVENTS_VER}.tar.gz https://github.com/Kong/lua-resty-events/archive/refs/tags/${RESTY_EVENTS_VER}.tar.gz \
 # Download lua-resty-timer

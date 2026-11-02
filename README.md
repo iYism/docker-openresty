@@ -149,19 +149,25 @@ docker buildx build \
 | `HTTP_PROXY` | *(none)* | HTTP proxy for network requests |
 | `HTTPS_PROXY` | *(none)* | HTTPS proxy for network requests |
 | `NO_PROXY` | *(none)* | Hosts to bypass proxy |
-| `OPENRESTY_VER` | `1.29.2.5` | OpenResty version |
-| `OPENSSL_VER` | `3.5.5` | OpenSSL version |
+| `OPENRESTY_VER` | `1.31.8.1` | OpenResty version |
+| `OPENSSL_VER` | `3.5.9` | OpenSSL version (3.5 LTS) |
+| `OPENSSL_PATCH_VER` | `3.5.5` | OpenSSL session yield patch bundled with the selected OpenResty release |
 | `ZLIB_VER` | `1.3.2` | zlib compression library version |
-| `PCRE2_VER` | `10.47` | PCRE2 regex library version |
+| `PCRE2_VER` | `10.49` | PCRE2 regex library version |
 | `GEOIP_VER` | `1.6.12` | Legacy GeoIP library version |
-| `LIBMAXMINDDB_VER` | `1.13.3` | MaxMind DB reader library version |
-| `BROTLI_VER` | `1.2.0` | Brotli compression library version |
-| `NGX_BROTLI_VER` | `master` | nginx Brotli module version |
+| `LIBMAXMINDDB_VER` | `1.14.1` | MaxMind DB reader library version |
+| `BROTLI_VER` | `1.2.1` | Brotli compression library version |
+| `NGX_BROTLI_VER` | `53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1` | nginx Brotli module commit, tag, or branch |
 | `NGX_GEOIP2_VER` | `3.4` | nginx GeoIP2 module version |
 | `RESTY_EXPR_VER` | `1.3.2` | lua-resty-expr version |
-| `RESTY_HTTP_VER` | `0.2.3` | lua-resty-http version |
+| `RESTY_HTTP_VER` | `0.18.1` | Kong lua-resty-http version |
 | `RESTY_IPMATCHER_VER` | `0.6.1` | lua-resty-ipmatcher version |
 | `RESTY_RADIXTREE_VER` | `2.9.2` | lua-resty-radixtree version |
+
+Dependency versions were checked against upstream releases on **2026-11-02**.
+The default is [OpenResty 1.31.8.1](https://github.com/openresty/openresty/releases/tag/v1.31.8.1).
+OpenSSL uses the latest **3.5 LTS** patch release, [3.5.9](https://openssl-library.org/source/), to retain OpenResty's session callback yield support. OpenSSL 4.1.0 is newer, but OpenResty 1.31.8.1 does not bundle a 4.x yield patch. The 3.5.5 patch is extracted from the selected OpenResty source archive; verify patch compatibility when overriding either OpenSSL argument.
+The [ngx_brotli module](https://github.com/google/ngx_brotli) has no release tags, so its latest upstream commit is pinned for reproducible downloads. zlib, legacy GeoIP, the GeoIP2 module, lua-resty-expr, lua-resty-ipmatcher, and lua-resty-radixtree already use their latest published releases/tags.
 
 ## Included Components
 
@@ -242,7 +248,7 @@ mkdir -p /var/lib/nginx/lua_cache
 Images are available on Docker Hub:
 
 - `sungyism/openresty:latest` - Latest stable build
-- `sungyism/openresty:1.29.2.5` - Version-specific tag
+- `sungyism/openresty:1.31.8.1` - Version-specific tag
 
 ## Security Considerations
 
